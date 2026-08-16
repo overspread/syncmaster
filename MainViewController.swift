@@ -621,9 +621,20 @@ class MainViewController: NSViewController {
     // MARK: - 设置页
     private func setupSettingsPanel() {
         let panel = panels[6]
+
+        // 整个设置页放入可滚动容器，彻底解决内容超高重叠问题
+        let outerScroll = NSScrollView(frame: CGRect(x: 24, y: 24, width: 712, height: 660))
+        outerScroll.hasVerticalScroller = true; outerScroll.autohidesScrollers = true
+        outerScroll.drawsBackground = false
+        panel.addSubview(outerScroll)
+
+        let containerHeight: CGFloat = 880
+        let content = NSView(frame: CGRect(x: 0, y: 0, width: 700, height: containerHeight))
+        outerScroll.documentView = content
+
         let title = makeLabel("服务器与系统设置", size: 20, weight: .bold, color: .white)
-        title.frame = CGRect(x: 24, y: 650, width: 200, height: 30)
-        panel.addSubview(title)
+        title.frame = CGRect(x: 24, y: containerHeight - 40, width: 300, height: 30)
+        content.addSubview(title)
 
         let cfg = SyncConfig.shared
         jumpHostField = makeTextField(cfg.jumpHost); jumpKeyField = makeTextField(cfg.jumpKey)
@@ -633,55 +644,59 @@ class MainViewController: NSViewController {
 
         let labels = ["跳板机 (user@host)", "跳板机密钥路径", "服务器用户", "服务器地址", "服务器密钥路径(远程)", "服务器目录", "本地目录"]
         let fields = [jumpHostField!, jumpKeyField!, remoteUserField!, remoteHostField!, remoteKeyField!, remoteDirField!, localDirField!]
-        for (i, (l, f)) in zip(labels, fields).enumerated() {
+        var rowY = containerHeight - 80
+        for (l, f) in zip(labels, fields) {
             let lbl = makeLabel(l, size: 10, weight: .regular, color: NSColor(white: 0.55, alpha: 1))
-            lbl.frame = CGRect(x: 24, y: 560 - CGFloat(i) * 42, width: 180, height: 16)
-            panel.addSubview(lbl)
-            f.frame = CGRect(x: 220, y: 560 - CGFloat(i) * 42 - 14, width: 470, height: 24)
-            panel.addSubview(f)
+            lbl.frame = CGRect(x: 24, y: rowY, width: 180, height: 16)
+            content.addSubview(lbl)
+            f.frame = CGRect(x: 220, y: rowY - 14, width: 470, height: 24)
+            content.addSubview(f)
+            rowY -= 44
         }
 
+        // 按钮与连接状态
         let testBtn = NSButton(title: "测试连接", target: self, action: #selector(testConnection))
         testBtn.bezelStyle = .rounded; testBtn.font = .systemFont(ofSize: 11, weight: .medium)
-        testBtn.frame = CGRect(x: 540, y: 462, width: 90, height: 26)
+        testBtn.frame = CGRect(x: 540, y: rowY - 8, width: 90, height: 26)
         testBtn.contentTintColor = NSColor(red: 0.3, green: 0.8, blue: 0.4, alpha: 1)
-        panel.addSubview(testBtn)
-
-        connStatusLbl = makeLabel("", size: 10, weight: .medium, color: NSColor(white: 0.5, alpha: 1))
-        connStatusLbl.frame = CGRect(x: 24, y: 432, width: 500, height: 18)
-        panel.addSubview(connStatusLbl)
+        content.addSubview(testBtn)
 
         let saveBtn = NSButton(title: "保存设置", target: self, action: #selector(saveSettings))
         saveBtn.bezelStyle = .rounded; saveBtn.font = .systemFont(ofSize: 12, weight: .semibold)
-        saveBtn.frame = CGRect(x: 640, y: 460, width: 100, height: 30)
+        saveBtn.frame = CGRect(x: 640, y: rowY - 8, width: 100, height: 26)
         saveBtn.contentTintColor = NSColor(red: 0, green: 0.6, blue: 0.9, alpha: 1)
-        panel.addSubview(saveBtn)
+        content.addSubview(saveBtn)
+
+        connStatusLbl = makeLabel("", size: 10, weight: .medium, color: NSColor(white: 0.5, alpha: 1))
+        connStatusLbl.frame = CGRect(x: 24, y: rowY + 6, width: 500, height: 18)
+        content.addSubview(connStatusLbl)
 
         // .env 同步策略区域
+        rowY -= 70
         let envTitle = makeLabel(".env 环境变量同步策略", size: 13, weight: .semibold, color: .white)
-        envTitle.frame = CGRect(x: 24, y: 420, width: 200, height: 20)
-        panel.addSubview(envTitle)
+        envTitle.frame = CGRect(x: 24, y: rowY, width: 220, height: 20)
+        content.addSubview(envTitle)
 
         envSyncCheckbox = NSButton(checkboxWithTitle: "启用 .env 智能同步", target: self, action: #selector(toggleEnvSync))
         envSyncCheckbox.state = cfg.envSyncEnabled ? .on : .off
-        envSyncCheckbox.frame = CGRect(x: 24, y: 398, width: 200, height: 20)
-        panel.addSubview(envSyncCheckbox)
+        envSyncCheckbox.frame = CGRect(x: 24, y: rowY - 26, width: 200, height: 20)
+        content.addSubview(envSyncCheckbox)
 
         envStatusLbl = makeLabel("", size: 9, weight: .regular, color: NSColor(white: 0.5, alpha: 1))
-        envStatusLbl.frame = CGRect(x: 230, y: 398, width: 300, height: 20)
-        panel.addSubview(envStatusLbl)
+        envStatusLbl.frame = CGRect(x: 230, y: rowY - 26, width: 300, height: 20)
+        content.addSubview(envStatusLbl)
 
         envRefreshBtn = NSButton(title: "刷新 Key 列表", target: self, action: #selector(refreshEnvKeys))
         envRefreshBtn.bezelStyle = .rounded; envRefreshBtn.font = .systemFont(ofSize: 10, weight: .medium)
-        envRefreshBtn.frame = CGRect(x: 540, y: 398, width: 100, height: 20)
+        envRefreshBtn.frame = CGRect(x: 540, y: rowY - 26, width: 100, height: 20)
         envRefreshBtn.contentTintColor = NSColor(red: 0, green: 0.7, blue: 1, alpha: 1)
-        panel.addSubview(envRefreshBtn)
+        content.addSubview(envRefreshBtn)
 
         envSyncBtn = NSButton(title: "同步 .env", target: self, action: #selector(syncEnvNow))
         envSyncBtn.bezelStyle = .rounded; envSyncBtn.font = .systemFont(ofSize: 10, weight: .medium)
-        envSyncBtn.frame = CGRect(x: 650, y: 398, width: 90, height: 20)
+        envSyncBtn.frame = CGRect(x: 650, y: rowY - 26, width: 90, height: 20)
         envSyncBtn.contentTintColor = NSColor(red: 0.3, green: 0.8, blue: 0.4, alpha: 1)
-        panel.addSubview(envSyncBtn)
+        content.addSubview(envSyncBtn)
 
         envKeysTable = NSTableView()
         for (id, t, w) in [("key","KEY",150),("local","本地值",200),("remote","远程值",200),("sync","同步?",60)] {
@@ -694,24 +709,25 @@ class MainViewController: NSViewController {
         envKeysTable.backgroundColor = NSColor(red: 0.07, green: 0.09, blue: 0.14, alpha: 1)
         envKeysTable.selectionHighlightStyle = .none
 
-        let envScroll = NSScrollView(frame: CGRect(x: 24, y: 240, width: 712, height: 150))
+        let envScroll = NSScrollView(frame: CGRect(x: 24, y: rowY - 186, width: 670, height: 160))
         envScroll.documentView = envKeysTable
         envScroll.hasVerticalScroller = true; envScroll.autohidesScrollers = true
         envScroll.wantsLayer = true
         envScroll.layer?.backgroundColor = NSColor(red: 0.07, green: 0.09, blue: 0.14, alpha: 1).cgColor
         envScroll.layer?.cornerRadius = 8; envScroll.layer?.borderWidth = 1
         envScroll.layer?.borderColor = NSColor(red: 0.16, green: 0.22, blue: 0.3, alpha: 1).cgColor
-        panel.addSubview(envScroll)
+        content.addSubview(envScroll)
 
         // .syncignore 编辑器
+        rowY -= 190
         let igTitle = makeLabel(".syncignore 规则编辑器", size: 13, weight: .semibold, color: .white)
-        igTitle.frame = CGRect(x: 24, y: 210, width: 200, height: 20)
-        panel.addSubview(igTitle)
+        igTitle.frame = CGRect(x: 24, y: rowY, width: 220, height: 20)
+        content.addSubview(igTitle)
         let igHint = makeLabel("每行一条规则，支持通配符 *，目录加 / 结尾", size: 9, weight: .regular, color: NSColor(white: 0.5, alpha: 1))
-        igHint.frame = CGRect(x: 24, y: 192, width: 400, height: 14)
-        panel.addSubview(igHint)
+        igHint.frame = CGRect(x: 24, y: rowY - 18, width: 400, height: 14)
+        content.addSubview(igHint)
 
-        let igScroll = NSScrollView(frame: CGRect(x: 24, y: 40, width: 712, height: 140))
+        let igScroll = NSScrollView(frame: CGRect(x: 24, y: rowY - 168, width: 670, height: 150))
         ignoreEditor = NSTextView()
         ignoreEditor.isRichText = false
         ignoreEditor.font = NSFont(name: "SF Mono", size: 11) ?? .systemFont(ofSize: 11)
@@ -724,13 +740,13 @@ class MainViewController: NSViewController {
         igScroll.layer?.backgroundColor = NSColor(red: 0.07, green: 0.09, blue: 0.14, alpha: 1).cgColor
         igScroll.layer?.cornerRadius = 8; igScroll.layer?.borderWidth = 1
         igScroll.layer?.borderColor = NSColor(red: 0.16, green: 0.22, blue: 0.3, alpha: 1).cgColor
-        panel.addSubview(igScroll)
+        content.addSubview(igScroll)
 
         let igSaveBtn = NSButton(title: "保存规则", target: self, action: #selector(saveIgnoreRules))
         igSaveBtn.bezelStyle = .rounded; igSaveBtn.font = .systemFont(ofSize: 11)
-        igSaveBtn.frame = CGRect(x: 640, y: 655, width: 90, height: 24)
+        igSaveBtn.frame = CGRect(x: 590, y: rowY - 190, width: 100, height: 24)
         igSaveBtn.contentTintColor = NSColor(red: 0.16, green: 0.65, blue: 0.27, alpha: 1)
-        panel.addSubview(igSaveBtn)
+        content.addSubview(igSaveBtn)
     }
 
     @objc private func testConnection() {
