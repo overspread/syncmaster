@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{% block title %}SyncMaster{% endblock %}</title>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<div class="app-layout">
+{% block sidebar %}
+<aside class="sidebar">
+    <div class="sidebar-brand">
+        <i class="fas fa-cloud"></i>
+        <span class="brand-name">SyncMaster</span>
+        <span class="brand-version">v1.0</span>
+    </div>
+    <nav class="sidebar-nav">
+        <div class="nav-section">
+            <span class="nav-section-label">同步管理</span>
+            <a href="/" class="nav-item active"><i class="fas fa-th-large"></i> 概览</a>
+            <a href="#" class="nav-item"><i class="fas fa-arrows-alt-h"></i> 同步</a>
+            <a href="#" class="nav-item"><i class="fas fa-columns"></i> 差异对比</a>
+            <a href="#" class="nav-item"><i class="fas fa-tags"></i> 同步分类</a>
+        </div>
+        <div class="nav-section">
+            <span class="nav-section-label">历史记录</span>
+            <a href="#" class="nav-item"><i class="fas fa-history"></i> 同步历史</a>
+            <a href="#" class="nav-item"><i class="fas fa-undo"></i> 备份&amp;回滚</a>
+        </div>
+        <div class="nav-section">
+            <span class="nav-section-label">规则&amp;设置</span>
+            <a href="#" class="nav-item"><i class="fas fa-ban"></i> .syncignore</a>
+            <a href="#" class="nav-item"><i class="fas fa-cog"></i> 设置中心</a>
+        </div>
+    </nav>
+    <div class="sidebar-storage">
+        <div class="storage-item">
+            <span class="storage-label">本地</span>
+            <div class="storage-bar"><div class="storage-fill" style="width:60%"></div></div>
+            <span class="storage-text">128G / 1TB</span>
+        </div>
+        <div class="storage-item">
+            <span class="storage-label">服务器</span>
+            <div class="storage-bar"><div class="storage-fill" style="width:35%"></div></div>
+            <span class="storage-text">256G / 1TB</span>
+        </div>
+    </div>
+    <div class="sidebar-user">
+        <div class="user-avatar"><i class="fas fa-user"></i></div>
+        <div class="user-info">
+            <div class="user-name">Overspread</div>
+            <div class="user-status"><span class="dot online"></span> 已连接</div>
+        </div>
+    </div>
+</aside>
+{% endblock %}
+<main class="main-content">
+    {% block content %}{% endblock %}
+</main>
+</div>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script src="/static/app.js"></script>
+<script>
+const evt = new EventSource('/events');
+evt.onmessage = e => {
+    const d = JSON.parse(e.data);
+    if (d.type === 'log') {
+        const el = document.getElementById('live-log');
+        if (el) {
+            el.textContent += d.text + '\n';
+            el.scrollTop = el.scrollHeight;
+        }
+    } else if (d.type === 'done') {
+        document.querySelectorAll('.btn-primary').forEach(b => b.disabled = false);
+        if (d.success) {
+            document.getElementById('stat-pending') && (document.getElementById('stat-pending').textContent = '0');
+        }
+        if (window.location.pathname === '/') {
+            setTimeout(() => location.reload(), 2000);
+        }
+    } else if (d.type === 'started') {
+        document.querySelectorAll('.btn-primary').forEach(b => b.disabled = true);
+    }
+};
+</script>
+</body>
+</html>

@@ -1,0 +1,28 @@
+# Build output
+build/
+*.app
+!SyncMaster.app/Contents/Info.plist
+!SyncMaster.app/Contents/Resources/icon.icns
+
+# SQLite database (contains local file paths + sync state)
+*.sqlite
+*.sqlite-*
+
+# Runtime data
+.syncmaster-*
+.DS_Store
+
+# Xcode
+*.xcuserstate
+*.swp
+*~
+
+# Python (legacy web backend)
+__pycache__/
+*.pyc
+
+# Keys / secrets
+*.pem
+*.key
+.env
+.env.*

@@ -1,0 +1,51 @@
+# Hermes 同步排除规则 - 排除 .env、运行时文件、缓存、日志
+.env
+.env.bak.*
+.DS_Store
+gateway.pid
+gateway.lock
+gateway_state.json
+gateway-starts.log
+processes.json
+*.lock
+cache/
+logs/
+Flipped Images/
+JPEG Images/
+Original Files/
+Original Images/
+PDF Files/
+PNG Images/
+Processed Images/
+Rotated Images/
+TIFF Images/
+node/
+.npm/
+__pycache__/
+.history
+.history_*
+audio_cache/
+hooks/
+pairing/
+pending_messages/
+platforms/
+config.yaml.bak.*
+config.yaml.backup.*
+config.yaml.corrupt.*
+auth.json.bak.*
+backups/
+kanban.db
+kanban.db.*
+response_store.db
+response_store.db-*
+*.shm
+*.wal
+interrupt_debug.log
+feishu_seen_message_ids.json
+models_dev_cache.json
+ollama_cloud_models_cache.json
+provider_models_cache.json
+.hermes_history
+.restart_last_processed.json
+.gateway-launchd-unsupported
+checkpoints/
