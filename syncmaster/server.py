@@ -12,8 +12,11 @@ from urllib.parse import urlparse, parse_qs
 try:
     from jinja2 import Environment, FileSystemLoader, select_autoescape
 except ImportError:
+    # Self-install into the *user* site so it works even without write access
+    # to the system Python (e.g. /usr/bin/python3 launched from a packaged
+    # .app, where we can't write to /Library/.../site-packages).
     subprocess.check_call(
-        [sys.executable, "-m", "pip", "install", "--quiet", "jinja2"]
+        [sys.executable, "-m", "pip", "install", "--user", "--quiet", "jinja2"]
     )
     from jinja2 import Environment, FileSystemLoader, select_autoescape
 

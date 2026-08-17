@@ -23,12 +23,43 @@ const PYTHON_SERVER_PORT: u16 = 9800;
 const PORT_READY_TIMEOUT_SECS: u64 = 20;
 const POLL_INTERVAL_MS: u64 = 250;
 
+// Resolve which Python binary to use for the sidecar.
+//
+// On macOS a GUI-launched .app has a very narrow PATH, so we can't rely on
+// bare `python3` resolving to a usable interpreter. We probe well-known
+// absolute paths, preferring a user-installed modern Python (Homebrew) and
+// falling back to the always-present system /usr/bin/python3.
 #[cfg(not(debug_assertions))]
 #[cfg(target_os = "windows")]
-const PYTHON_BIN: &str = "pythonw";
+fn find_python() -> PathBuf {
+    PathBuf::from("pythonw")
+}
+
 #[cfg(not(debug_assertions))]
 #[cfg(not(target_os = "windows"))]
-const PYTHON_BIN: &str = "python3";
+fn find_python() -> PathBuf {
+    for p in [
+        "/opt/homebrew/bin/python3",
+        "/usr/local/bin/python3",
+        "/usr/bin/python3",
+    ] {
+        if std::path::Path::new(p).exists() {
+            return PathBuf::from(p);
+        }
+    }
+    PathBuf::from("python3")
+}
+
+// Build a sane PATH for the sidecar so python3 / rsync / ssh are all
+// discoverable even when the app is launched from the GUI (minimal PATH).
+#[cfg(not(debug_assertions))]
+fn python_path_env() -> String {
+    const BASE: &str = "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin";
+    match std::env::var("PATH") {
+        Ok(existing) if !existing.is_empty() => format!("{BASE}:{existing}"),
+        _ => BASE.to_string(),
+    }
+}
 
 fn main() {
     let server_child: Arc<Mutex<Option<Child>>> = Arc::new(Mutex::new(None));
@@ -51,17 +82,20 @@ fn main() {
 
             // Start python server process
             let working_dir = server_py.parent().unwrap().to_path_buf();
-            let child = Command::new(PYTHON_BIN)
+            let python_bin = find_python();
+            let child = Command::new(&python_bin)
                 .arg(&server_py)
                 .current_dir(&working_dir)
                 .env("SYNCMASTER_PORT", PYTHON_SERVER_PORT.to_string())
+                .env("PATH", python_path_env())
                 .env_remove("__PYVENV_LAUNCHER__")
                 .spawn()
                 .unwrap_or_else(|e| {
                     panic!(
-                        "Could not start `{PYTHON_BIN}`.\n\
+                        "Could not start `{}`.\n\
                          Please make sure Python 3 is installed and available on PATH.\n\
-                        Error: {e}"
+                        Error: {e}",
+                        python_bin.display()
                     )
                 });
 
