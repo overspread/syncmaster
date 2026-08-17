@@ -1,0 +1,56 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "SyncMaster",
+  "version": "1.0.0",
+  "identifier": "app.syncmaster.dev",
+  "build": {
+    "frontendDist": "webapp",
+    "devUrl": "http://127.0.0.1:9800",
+    "beforeDevCommand": "python3 -c \"import shutil; shutil.copytree('syncmaster', 'src-tauri/webapp', ignore=shutil.ignore_patterns('__pycache__'), dirs_exist_ok=True)\" && python3 syncmaster/server.py",
+    "beforeBuildCommand": "python3 -c \"import shutil; shutil.copytree('syncmaster', 'src-tauri/webapp', ignore=shutil.ignore_patterns('__pycache__'), dirs_exist_ok=True)\""
+  },
+  "app": {
+    "withGlobalTauri": true,
+    "windows": [
+      {
+        "label": "main",
+        "title": "SyncMaster",
+        "width": 1280,
+        "height": 820,
+        "minWidth": 960,
+        "minHeight": 600,
+        "resizable": true,
+        "fullscreen": false,
+        "url": "about:blank"
+      }
+    ],
+    "security": {
+      "csp": "default-src 'self' 'unsafe-inline' 'unsafe-eval' http://127.0.0.1:* http://localhost:* ws://127.0.0.1:* ws://localhost:* data: blob:; img-src 'self' data: blob: http://127.0.0.1:* http://localhost:* https:; connect-src 'self' http://127.0.0.1:* http://localhost:* ws://127.0.0.1:* ws://localhost:*",
+      "assetProtocol": {
+        "enable": true,
+        "scope": ["**"]
+      }
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
+    "resources": [
+      "webapp"
+    ],
+    "category": "DeveloperTool",
+    "shortDescription": "Hermes config sync manager",
+    "longDescription": "Cross-platform UI for managing Hermes configuration sync over SSH+rsync.",
+    "macOS": {
+      "minimumSystemVersion": "12.0",
+      "exceptionDomain": "127.0.0.1"
+    }
+  }
+}

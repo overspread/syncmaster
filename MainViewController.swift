@@ -93,14 +93,28 @@ class MainViewController: NSViewController {
     private var connStatusLbl: NSTextField!
 
     private let selectedCatLbl = NSTextField(labelWithString: "未选择（点击分类管理选择）")
-    private let contentLeft: CGFloat = 220
-    private let panelWidth: CGFloat = 760
+    private let sidebarWidth: CGFloat = 220
+
+    // 概览页需要重布局时引用的子视图
+    private var overviewCardViews: [NSView] = []
+    private var overviewBtnViews: [NSView] = []
+    private var overviewStatCards: [NSView] = []
+    private var monitorCard: NSView! = NSView()
+    private var overviewDeviceGroup: NSView! = NSView()
+    private var overviewButtonGroup: NSView! = NSView()
+    private var overviewStatGroup: NSView! = NSView()
+    private var overviewTitle: NSTextField! = NSTextField(labelWithString: "")
+    private var overviewSub: NSTextField! = NSTextField(labelWithString: "")
+    private var monitorTitle: NSTextField! = NSTextField(labelWithString: "")
+    private var statsTitle: NSTextField!
+    private var quickTitle: NSTextField!
 
     override func loadView() {
-        view = NSView(frame: NSRect(x: 0, y: 0, width: 1000, height: 700))
+        view = NSView(frame: NSRect(x: 0, y: 0, width: 1100, height: 750))
         view.wantsLayer = true
         view.layer?.backgroundColor = NSColor(red: 0.05, green: 0.07, blue: 0.1, alpha: 1).cgColor
         view.appearance = NSAppearance(named: .darkAqua)
+        view.autoresizingMask = [.width, .height]
     }
 
     override func viewDidLoad() {
@@ -123,21 +137,59 @@ class MainViewController: NSViewController {
         switchPanel(0)
     }
 
+    override func viewDidLayout() {
+        super.viewDidLayout()
+        let h = view.bounds.height
+        let w = view.bounds.width
+
+        // 侧边栏高度自适应
+        sidebar.frame = CGRect(x: 0, y: 0, width: sidebarWidth, height: h)
+
+        // 内容区宽度自适应
+        let contentW = max(w - sidebarWidth, 400)
+        contentView.frame = CGRect(x: sidebarWidth, y: 0, width: contentW, height: h)
+        for p in panels { p.frame = contentView.bounds }
+        syncPanel.frame = contentView.bounds
+
+        // 概览页重布局
+        relayoutOverview(contentW: contentW, contentH: h)
+
+        // 同步页重布局
+        relayoutSync(contentW: contentW)
+
+        // 历史页 - scrollView 宽度自适应
+        relayoutHistoryPanel(contentW: contentW, contentH: h)
+
+        // 审计页
+        relayoutAuditPanel(contentW: contentW, contentH: h)
+
+        // 备份页
+        relayoutBackupPanel(contentW: contentW, contentH: h)
+
+        // 设置页
+        relayoutSettingsPanel(contentW: contentW, contentH: h)
+
+        // 分类面板
+        categoryPanel?.frame = contentView.bounds
+    }
+
     // MARK: - 侧边栏 (对比设计图 V1.0 - V5.0)
     private func setupSidebar() {
-        sidebar.frame = CGRect(x: 0, y: 0, width: contentLeft, height: 700)
+        let h = view.bounds.height
+        sidebar.frame = CGRect(x: 0, y: 0, width: sidebarWidth, height: h)
         sidebar.wantsLayer = true
         sidebar.layer?.backgroundColor = NSColor(red: 0.07, green: 0.09, blue: 0.14, alpha: 1).cgColor
+        sidebar.autoresizingMask = .height
         view.addSubview(sidebar)
 
         let logo = makeLabel("◈ SyncMaster", size: 18, weight: .bold, color: .white)
-        logo.frame = CGRect(x: 18, y: 652, width: 190, height: 26)
+        logo.frame = CGRect(x: 18, y: h - 48, width: 190, height: 26)
         sidebar.addSubview(logo)
         let ver = makeLabel("v1.0.0 · 智能同步管理器", size: 10, weight: .medium, color: NSColor(red: 0, green: 0.7, blue: 1, alpha: 1))
-        ver.frame = CGRect(x: 18, y: 632, width: 190, height: 14)
+        ver.frame = CGRect(x: 18, y: h - 68, width: 190, height: 14)
         sidebar.addSubview(ver)
 
-        let divider = NSView(frame: CGRect(x: 14, y: 620, width: contentLeft - 28, height: 1))
+        let divider = NSView(frame: CGRect(x: 14, y: h - 80, width: sidebarWidth - 28, height: 1))
         divider.wantsLayer = true
         divider.layer?.backgroundColor = NSColor(red: 0.14, green: 0.18, blue: 0.26, alpha: 1).cgColor
         sidebar.addSubview(divider)
@@ -149,7 +201,7 @@ class MainViewController: NSViewController {
             btn.alignment = .left
             btn.font = .systemFont(ofSize: 13, weight: .medium)
             btn.contentTintColor = NSColor(white: 0.7, alpha: 1)
-            btn.frame = CGRect(x: 14, y: 580 - CGFloat(i) * 56, width: contentLeft - 28, height: 42)
+            btn.frame = CGRect(x: 14, y: h - 120 - CGFloat(i) * 56, width: sidebarWidth - 28, height: 42)
             btn.wantsLayer = true
             btn.layer?.cornerRadius = 8
             btn.layer?.backgroundColor = NSColor.clear.cgColor
@@ -179,11 +231,16 @@ class MainViewController: NSViewController {
     }
 
     private func setupContent() {
-        contentView.frame = CGRect(x: contentLeft, y: 0, width: panelWidth, height: 700)
+        let w = view.bounds.width
+        let h = view.bounds.height
+        let contentW = max(w - sidebarWidth, 400)
+        contentView.frame = CGRect(x: sidebarWidth, y: 0, width: contentW, height: h)
+        contentView.autoresizingMask = [.width, .height]
         view.addSubview(contentView)
         panels = [NSView(), NSView(), NSView(), NSView(), NSView(), NSView(), NSView()]
         for p in panels {
             p.frame = contentView.bounds
+            p.autoresizingMask = [.width, .height]
             p.isHidden = true
             contentView.addSubview(p)
         }
@@ -192,18 +249,21 @@ class MainViewController: NSViewController {
     // MARK: - 概览页 (还原设计图 V1.0 风格)
     private func setupOverviewPanel() {
         let panel = panels[0]
-        let title = makeLabel("概览", size: 20, weight: .bold, color: .white)
-        title.frame = CGRect(x: 24, y: 650, width: 200, height: 30)
-        panel.addSubview(title)
-        let sub = makeLabel("本地设备 ↔ 服务器 智能同步控制台", size: 11, weight: .regular, color: NSColor(white: 0.5, alpha: 1))
-        sub.frame = CGRect(x: 24, y: 628, width: 400, height: 18)
-        panel.addSubview(sub)
 
-        // 1. 设备连接卡片 (左电脑, 中间双向箭头, 右服务器)
-        panel.addSubview(createDeviceCard(frame: CGRect(x: 24, y: 480, width: 320, height: 130), isServer: false, title: "本地设备",
-            nameLabel: localNameLbl, pathLabel: localPathLbl, statusLabel: localStatusLbl, filesLabel: localFilesLbl, sizeLabel: localSizeLbl))
+        overviewTitle = makeLabel("概览", size: 20, weight: .bold, color: .white)
+        panel.addSubview(overviewTitle)
+        overviewSub = makeLabel("本地设备 ↔ 服务器 智能同步控制台", size: 11, weight: .regular, color: NSColor(white: 0.5, alpha: 1))
+        panel.addSubview(overviewSub)
 
-        let arrowBadge = NSView(frame: CGRect(x: 354, y: 520, width: 52, height: 52))
+        overviewDeviceGroup = NSView()
+        panel.addSubview(overviewDeviceGroup)
+
+        let cardLocal = createDeviceCard(frame: CGRect(x: 0, y: 0, width: 320, height: 130), isServer: false, title: "本地设备",
+            nameLabel: localNameLbl, pathLabel: localPathLbl, statusLabel: localStatusLbl, filesLabel: localFilesLbl, sizeLabel: localSizeLbl)
+        overviewDeviceGroup.addSubview(cardLocal)
+        overviewCardViews.append(cardLocal)
+
+        let arrowBadge = NSView(frame: CGRect(x: 330, y: 40, width: 52, height: 52))
         arrowBadge.wantsLayer = true
         arrowBadge.layer?.backgroundColor = NSColor(red: 0.1, green: 0.16, blue: 0.26, alpha: 1).cgColor
         arrowBadge.layer?.cornerRadius = 26
@@ -214,106 +274,165 @@ class MainViewController: NSViewController {
         arrowLbl.alignment = .center
         arrowLbl.frame = CGRect(x: 0, y: 12, width: 52, height: 28)
         arrowBadge.addSubview(arrowLbl)
-        panel.addSubview(arrowBadge)
+        overviewDeviceGroup.addSubview(arrowBadge)
 
-        panel.addSubview(createDeviceCard(frame: CGRect(x: 416, y: 480, width: 320, height: 130), isServer: true, title: "服务器",
-            nameLabel: serverNameLbl, pathLabel: serverPathLbl, statusLabel: serverStatusLbl, filesLabel: serverFilesLbl, sizeLabel: serverSizeLbl))
+        let cardServer = createDeviceCard(frame: CGRect(x: 392, y: 0, width: 320, height: 130), isServer: true, title: "服务器",
+            nameLabel: serverNameLbl, pathLabel: serverPathLbl, statusLabel: serverStatusLbl, filesLabel: serverFilesLbl, sizeLabel: serverSizeLbl)
+        overviewDeviceGroup.addSubview(cardServer)
+        overviewCardViews.append(cardServer)
 
-        // 2. 核心三大同步按钮 (对应设计图 V1.0 按钮样式)
-        let quickTitle = makeLabel("快捷同步操作", size: 13, weight: .semibold, color: .white)
-        quickTitle.frame = CGRect(x: 24, y: 435, width: 200, height: 20)
-        panel.addSubview(quickTitle)
+        // 同步按钮
+        overviewButtonGroup = NSView()
+        panel.addSubview(overviewButtonGroup)
+
+        quickTitle = makeLabel("快捷同步操作", size: 13, weight: .semibold, color: .white)
+        overviewButtonGroup.addSubview(quickTitle)
 
         let btnA = makeBigSyncBtn(title: "↑ 同步到服务器", subtitle: "本地 → 服务器", r: 0, 0.55, 0.95)
         let btnB = makeBigSyncBtn(title: "↓ 同步到本地", subtitle: "服务器 → 本地", r: 0.16, 0.7, 0.3)
         let btnC = makeBigSyncBtn(title: "↔ 智能双向同步", subtitle: "智能合并，冲突检测", r: 0.5, 0.3, 0.85)
 
-        btnA.frame = CGRect(x: 24, y: 355, width: 225, height: 62); btnA.action = #selector(syncToServer); btnA.target = self
-        btnB.frame = CGRect(x: 264, y: 355, width: 225, height: 62); btnB.action = #selector(syncToLocal); btnB.target = self
-        btnC.frame = CGRect(x: 504, y: 355, width: 232, height: 62); btnC.action = #selector(syncBidirectional); btnC.target = self
+        btnA.frame = CGRect(x: 0, y: 0, width: 225, height: 62); btnA.action = #selector(syncToServer); btnA.target = self
+        btnB.frame = CGRect(x: 240, y: 0, width: 225, height: 62); btnB.action = #selector(syncToLocal); btnB.target = self
+        btnC.frame = CGRect(x: 480, y: 0, width: 232, height: 62); btnC.action = #selector(syncBidirectional); btnC.target = self
         layoutBigSyncBtn(btnA); layoutBigSyncBtn(btnB); layoutBigSyncBtn(btnC)
-        panel.addSubview(btnA); panel.addSubview(btnB); panel.addSubview(btnC)
+        overviewButtonGroup.addSubview(btnA); overviewButtonGroup.addSubview(btnB); overviewButtonGroup.addSubview(btnC)
+        overviewBtnViews.append(btnA); overviewBtnViews.append(btnB); overviewBtnViews.append(btnC)
 
-        // 3. 统计数据 4 宫格 (对应设计图 V1.0 同步统计)
-        let statsTitle = makeLabel("同步统计", size: 13, weight: .semibold, color: .white)
-        statsTitle.frame = CGRect(x: 24, y: 310, width: 200, height: 20)
-        panel.addSubview(statsTitle)
+        // 统计卡片
+        overviewStatGroup = NSView()
+        panel.addSubview(overviewStatGroup)
+
+        statsTitle = makeLabel("同步统计", size: 13, weight: .semibold, color: .white)
+        overviewStatGroup.addSubview(statsTitle)
 
         statsTotal = makeStatField(); statsPending = makeStatField(); statsLastSync = makeStatField(); statsSuccess = makeStatField()
 
-        let card1 = createStatCard(frame: CGRect(x: 24, y: 215, width: 168, height: 80), label: "总文件数", field: statsTotal, accentColor: NSColor(red: 0, green: 0.7, blue: 1, alpha: 1))
-        let card2 = createStatCard(frame: CGRect(x: 206, y: 215, width: 168, height: 80), label: "待同步文件", field: statsPending, accentColor: NSColor(red: 0.9, green: 0.6, blue: 0, alpha: 1))
-        let card3 = createStatCard(frame: CGRect(x: 388, y: 215, width: 168, height: 80), label: "成功率", field: statsSuccess, accentColor: NSColor(red: 0.3, green: 0.8, blue: 0.4, alpha: 1))
-        let card4 = createStatCard(frame: CGRect(x: 570, y: 215, width: 166, height: 80), label: "上次同步", field: statsLastSync, accentColor: NSColor(red: 0.6, green: 0.4, blue: 0.9, alpha: 1))
+        let card1 = createStatCard(frame: CGRect(x: 0, y: 0, width: 168, height: 80), label: "总文件数", field: statsTotal, accentColor: NSColor(red: 0, green: 0.7, blue: 1, alpha: 1))
+        let card2 = createStatCard(frame: CGRect(x: 182, y: 0, width: 168, height: 80), label: "待同步文件", field: statsPending, accentColor: NSColor(red: 0.9, green: 0.6, blue: 0, alpha: 1))
+        let card3 = createStatCard(frame: CGRect(x: 364, y: 0, width: 168, height: 80), label: "成功率", field: statsSuccess, accentColor: NSColor(red: 0.3, green: 0.8, blue: 0.4, alpha: 1))
+        let card4 = createStatCard(frame: CGRect(x: 546, y: 0, width: 166, height: 80), label: "上次同步", field: statsLastSync, accentColor: NSColor(red: 0.6, green: 0.4, blue: 0.9, alpha: 1))
 
-        panel.addSubview(card1); panel.addSubview(card2); panel.addSubview(card3); panel.addSubview(card4)
+        overviewStatGroup.addSubview(card1); overviewStatGroup.addSubview(card2); overviewStatGroup.addSubview(card3); overviewStatGroup.addSubview(card4)
+        overviewStatCards.append(card1); overviewStatCards.append(card2); overviewStatCards.append(card3); overviewStatCards.append(card4)
 
-        // 4. 实时监控面板 (对应设计图 V4.0 / V5.0)
-        let monTitle = makeLabel("实时监控与速率", size: 13, weight: .semibold, color: .white)
-        monTitle.frame = CGRect(x: 24, y: 175, width: 200, height: 20)
-        panel.addSubview(monTitle)
+        // 监控面板内容
+        monitorTitle = makeLabel("实时监控与速率", size: 13, weight: .semibold, color: .white)
+        panel.addSubview(monitorTitle)
 
-        let monCard = makeCardFrame(CGRect(x: 24, y: 40, width: 712, height: 120))
-        panel.addSubview(monCard)
+        monitorCard = makeCardFrame(CGRect(x: 0, y: 0, width: 712, height: 120))
+        panel.addSubview(monitorCard)
 
         let speedTitle = makeLabel("实时速率", size: 9, weight: .regular, color: NSColor(white: 0.5, alpha: 1))
-        speedTitle.frame = CGRect(x: 18, y: 82, width: 100, height: 14); monCard.addSubview(speedTitle)
+        speedTitle.frame = CGRect(x: 18, y: 82, width: 100, height: 14); monitorCard.addSubview(speedTitle)
         monitorSpeedLbl.font = .systemFont(ofSize: 22, weight: .bold)
         monitorSpeedLbl.textColor = NSColor(red: 0, green: 0.7, blue: 1, alpha: 1)
         monitorSpeedLbl.frame = CGRect(x: 18, y: 52, width: 160, height: 28)
         monitorSpeedLbl.isEditable = false; monitorSpeedLbl.isBordered = false; monitorSpeedLbl.backgroundColor = .clear
-        monCard.addSubview(monitorSpeedLbl)
+        monitorCard.addSubview(monitorSpeedLbl)
 
         let doneTitle = makeLabel("已处理文件", size: 9, weight: .regular, color: NSColor(white: 0.5, alpha: 1))
-        doneTitle.frame = CGRect(x: 210, y: 82, width: 100, height: 14); monCard.addSubview(doneTitle)
+        doneTitle.frame = CGRect(x: 210, y: 82, width: 100, height: 14); monitorCard.addSubview(doneTitle)
         monitorDoneLbl.font = .systemFont(ofSize: 22, weight: .bold)
         monitorDoneLbl.textColor = .white
         monitorDoneLbl.frame = CGRect(x: 210, y: 52, width: 160, height: 28)
         monitorDoneLbl.isEditable = false; monitorDoneLbl.isBordered = false; monitorDoneLbl.backgroundColor = .clear
-        monCard.addSubview(monitorDoneLbl)
+        monitorCard.addSubview(monitorDoneLbl)
 
         let pctTitle = makeLabel("完成进度", size: 9, weight: .regular, color: NSColor(white: 0.5, alpha: 1))
-        pctTitle.frame = CGRect(x: 400, y: 82, width: 100, height: 14); monCard.addSubview(pctTitle)
+        pctTitle.frame = CGRect(x: 400, y: 82, width: 100, height: 14); monitorCard.addSubview(pctTitle)
         monitorPercentLbl.font = .systemFont(ofSize: 22, weight: .bold)
         monitorPercentLbl.textColor = NSColor(red: 0.3, green: 0.8, blue: 0.4, alpha: 1)
         monitorPercentLbl.frame = CGRect(x: 400, y: 52, width: 120, height: 28)
         monitorPercentLbl.isEditable = false; monitorPercentLbl.isBordered = false; monitorPercentLbl.backgroundColor = .clear
-        monCard.addSubview(monitorPercentLbl)
+        monitorCard.addSubview(monitorPercentLbl)
 
         let etaTitle = makeLabel("预计剩余", size: 9, weight: .regular, color: NSColor(white: 0.5, alpha: 1))
-        etaTitle.frame = CGRect(x: 560, y: 82, width: 100, height: 14); monCard.addSubview(etaTitle)
+        etaTitle.frame = CGRect(x: 560, y: 82, width: 100, height: 14); monitorCard.addSubview(etaTitle)
         monitorEtaLbl.font = .systemFont(ofSize: 22, weight: .bold)
         monitorEtaLbl.textColor = .white
         monitorEtaLbl.frame = CGRect(x: 560, y: 52, width: 140, height: 28)
         monitorEtaLbl.isEditable = false; monitorEtaLbl.isBordered = false; monitorEtaLbl.backgroundColor = .clear
-        monCard.addSubview(monitorEtaLbl)
+        monitorCard.addSubview(monitorEtaLbl)
 
         monitorBar.style = .bar
         monitorBar.frame = CGRect(x: 18, y: 22, width: 676, height: 12)
         monitorBar.isIndeterminate = false
         monitorBar.minValue = 0; monitorBar.maxValue = 100
-        monCard.addSubview(monitorBar)
+        monitorCard.addSubview(monitorBar)
+
+        // 初始布局
+        relayoutOverview(contentW: view.bounds.width - sidebarWidth, contentH: view.bounds.height)
+    }
+
+    // 概览页动态重布局
+    private func relayoutOverview(contentW: CGFloat, contentH: CGFloat) {
+        // 从顶部往下，间距均匀紧凑
+        let titleY = contentH - 44
+        let subY = titleY - 24
+        let deviceH: CGFloat = 130
+        let deviceY = subY - 16 - deviceH
+        let btnH: CGFloat = 62
+        let quickLabelH: CGFloat = 20
+        let btnGroupY = deviceY - 20 - quickLabelH - btnH
+        let btnGroupTotalH = quickLabelH + 8 + btnH
+        let statH: CGFloat = 80
+        let statsTitleH: CGFloat = 20
+        let statGroupY = btnGroupY - 20 - statsTitleH - statH
+        let statGroupTotalH = statsTitleH + 8 + statH
+        let monH: CGFloat = 120
+        let monTitleH: CGFloat = 20
+        let monY = statGroupY - 20 - monTitleH - monH
+        let monBottom = monY
+
+        overviewTitle.frame = CGRect(x: 24, y: titleY, width: 200, height: 30)
+        overviewSub.frame = CGRect(x: 24, y: subY, width: contentW - 48, height: 18)
+
+        // 设备组居中
+        let deviceGroupW: CGFloat = 712
+        let deviceX = max((contentW - deviceGroupW) / 2, 24)
+        overviewDeviceGroup.frame = CGRect(x: deviceX, y: deviceY, width: deviceGroupW, height: deviceH)
+
+        // 按钮组居中
+        let btnGroupW: CGFloat = 712
+        let btnX = max((contentW - btnGroupW) / 2, 24)
+        overviewButtonGroup.frame = CGRect(x: btnX, y: btnGroupY, width: btnGroupW, height: btnGroupTotalH)
+        quickTitle.frame = CGRect(x: 0, y: btnGroupTotalH - quickLabelH, width: btnGroupW, height: quickLabelH)
+
+        // 统计卡片组居中
+        let statGroupW: CGFloat = 712
+        let statX = max((contentW - statGroupW) / 2, 24)
+        overviewStatGroup.frame = CGRect(x: statX, y: statGroupY, width: statGroupW, height: statGroupTotalH)
+        statsTitle.frame = CGRect(x: 0, y: statGroupTotalH - statsTitleH, width: statGroupW, height: statsTitleH)
+
+        // 监控面板居中并自适应宽度
+        monitorTitle.frame = CGRect(x: 24, y: monY + monH, width: contentW - 48, height: monTitleH)
+        let monCardW = min(contentW - 48, 712)
+        let monCardX = max((contentW - monCardW) / 2, 24)
+        monitorCard.frame = CGRect(x: monCardX, y: monY, width: monCardW, height: monH)
+        monitorBar.frame = CGRect(x: 18, y: 22, width: monCardW - 36, height: 12)
     }
 
     // MARK: - 同步页 (还原设计图 V2.0 差异对比 与 V4.0 同步界面)
     private func setupSyncPanel() {
         let panel = panels[1]
+        let h = view.bounds.height
         syncPanel.frame = panel.bounds
         panel.addSubview(syncPanel)
 
         let title = makeLabel("同步操作与扫描", size: 20, weight: .bold, color: .white)
-        title.frame = CGRect(x: 24, y: 650, width: 200, height: 30)
+        title.frame = CGRect(x: 24, y: h - 50, width: 200, height: 30)
         syncPanel.addSubview(title)
         let sub = makeLabel("选择模式 → 差异扫描 → 预览变化 → 确认执行", size: 11, weight: .regular, color: NSColor(white: 0.5, alpha: 1))
-        sub.frame = CGRect(x: 24, y: 628, width: 400, height: 18)
+        sub.frame = CGRect(x: 24, y: h - 72, width: 400, height: 18)
         syncPanel.addSubview(sub)
 
         let catSelTitle = makeLabel("当前选择分类", size: 10, weight: .regular, color: NSColor(white: 0.5, alpha: 1))
-        catSelTitle.frame = CGRect(x: 24, y: 595, width: 80, height: 16)
+        catSelTitle.frame = CGRect(x: 24, y: h - 105, width: 80, height: 16)
         syncPanel.addSubview(catSelTitle)
         selectedCatLbl.font = .systemFont(ofSize: 13, weight: .semibold)
         selectedCatLbl.textColor = NSColor(red: 0, green: 0.7, blue: 1, alpha: 1)
-        selectedCatLbl.frame = CGRect(x: 110, y: 593, width: 400, height: 18)
+        selectedCatLbl.frame = CGRect(x: 110, y: h - 107, width: 400, height: 18)
         selectedCatLbl.isEditable = false; selectedCatLbl.isBordered = false; selectedCatLbl.backgroundColor = .clear
         syncPanel.addSubview(selectedCatLbl)
 
@@ -321,15 +440,15 @@ class MainViewController: NSViewController {
         let btnB = makeBigSyncBtn(title: "↓ 同步到本地", subtitle: "服务器 → 本地", r: 0.16, 0.7, 0.3)
         let btnC = makeBigSyncBtn(title: "↔ 智能双向同步", subtitle: "智能合并，冲突检测", r: 0.5, 0.3, 0.85)
 
-        btnA.frame = CGRect(x: 24, y: 525, width: 225, height: 58); btnA.action = #selector(syncToServer); btnA.target = self
-        btnB.frame = CGRect(x: 264, y: 525, width: 225, height: 58); btnB.action = #selector(syncToLocal); btnB.target = self
-        btnC.frame = CGRect(x: 504, y: 525, width: 232, height: 58); btnC.action = #selector(syncBidirectional); btnC.target = self
+        btnA.frame = CGRect(x: 24, y: h - 175, width: 225, height: 58); btnA.action = #selector(syncToServer); btnA.target = self
+        btnB.frame = CGRect(x: 264, y: h - 175, width: 225, height: 58); btnB.action = #selector(syncToLocal); btnB.target = self
+        btnC.frame = CGRect(x: 504, y: h - 175, width: 232, height: 58); btnC.action = #selector(syncBidirectional); btnC.target = self
         layoutBigSyncBtn(btnA); layoutBigSyncBtn(btnB); layoutBigSyncBtn(btnC)
         syncPanel.addSubview(btnA); syncPanel.addSubview(btnB); syncPanel.addSubview(btnC)
 
         statusLabel.font = .systemFont(ofSize: 12)
         statusLabel.textColor = NSColor(white: 0.6, alpha: 1)
-        statusLabel.frame = CGRect(x: 24, y: 495, width: 600, height: 20)
+        statusLabel.frame = CGRect(x: 24, y: h - 205, width: 600, height: 20)
         statusLabel.isEditable = false; statusLabel.isBordered = false; statusLabel.backgroundColor = .clear
         syncPanel.addSubview(statusLabel)
 
@@ -337,7 +456,7 @@ class MainViewController: NSViewController {
         setupProgressPanel()
 
         let logLbl = makeLabel("同步执行日志", size: 11, weight: .semibold, color: NSColor(white: 0.6, alpha: 1))
-        logLbl.frame = CGRect(x: 24, y: 175, width: 200, height: 18)
+        logLbl.frame = CGRect(x: 24, y: h - 525, width: 200, height: 18)
         syncPanel.addSubview(logLbl)
         logView.isEditable = false
         logView.backgroundColor = NSColor(red: 0.07, green: 0.09, blue: 0.14, alpha: 1)
@@ -349,8 +468,35 @@ class MainViewController: NSViewController {
         syncPanel.addSubview(logView)
     }
 
+    // 同步页动态重布局
+    private func relayoutSync(contentW: CGFloat) {
+        let h = view.bounds.height
+        let panelW = min(contentW - 48, 712)
+        let panelX = max((contentW - panelW) / 2, 24)
+
+        if let title = syncPanel.subviews.first(where: { $0 is NSTextField && ($0 as? NSTextField)?.font?.pointSize == 20 }) {
+            title.frame = CGRect(x: 24, y: h - 50, width: 200, height: 30)
+        }
+
+        statusLabel.frame = CGRect(x: 24, y: h - 205, width: panelW, height: 20)
+        logView.frame = CGRect(x: panelX, y: 10, width: panelW, height: 155)
+
+        if !diffPanel.isHidden {
+            diffPanel.frame = CGRect(x: panelX, y: 320, width: panelW, height: diffPanel.frame.height)
+            diffList.frame = CGRect(x: 14, y: 12, width: panelW - 168, height: 106)
+            confirmBtn.frame = CGRect(x: panelW - 132, y: 18, width: 118, height: 32)
+            cancelBtn.frame = CGRect(x: panelW - 132, y: 56, width: 118, height: 26)
+        }
+        if !progressPanel.isHidden {
+            progressPanel.frame = CGRect(x: panelX, y: 320, width: panelW, height: progressPanel.frame.height)
+            progressBigBar.frame = CGRect(x: 130, y: 105, width: panelW - 152, height: 16)
+            progressFileLbl.frame = CGRect(x: 130, y: 70, width: panelW - 152, height: 18)
+        }
+    }
+
     // 差异对比面板 (对应设计图 V2.0 风格)
     private func setupDiffPanel() {
+        let h = view.bounds.height
         diffPanel.frame = CGRect(x: 24, y: 320, width: 712, height: 0)
         diffPanel.wantsLayer = true
         diffPanel.layer?.backgroundColor = NSColor(red: 0.08, green: 0.11, blue: 0.17, alpha: 1).cgColor
@@ -461,22 +607,23 @@ class MainViewController: NSViewController {
     // MARK: - 历史页
     private func setupHistoryPanel() {
         let panel = panels[3]
+        let h = view.bounds.height
         let title = makeLabel("同步历史记录", size: 20, weight: .bold, color: .white)
-        title.frame = CGRect(x: 24, y: 650, width: 200, height: 30)
+        title.frame = CGRect(x: 24, y: h - 50, width: 200, height: 30)
         panel.addSubview(title)
 
         let filterLbl = makeLabel("时间筛选", size: 11, weight: .regular, color: NSColor(white: 0.5, alpha: 1))
-        filterLbl.frame = CGRect(x: 24, y: 610, width: 70, height: 20)
+        filterLbl.frame = CGRect(x: 24, y: h - 90, width: 70, height: 20)
         panel.addSubview(filterLbl)
 
-        historyFilter = NSPopUpButton(frame: CGRect(x: 100, y: 608, width: 140, height: 24))
+        historyFilter = NSPopUpButton(frame: CGRect(x: 100, y: h - 92, width: 140, height: 24))
         historyFilter.addItems(withTitles: ["全部", "今天", "最近 7 天", "最近 30 天"])
         historyFilter.target = self; historyFilter.action = #selector(historyFilterChanged)
         panel.addSubview(historyFilter)
 
         let clearBtn = NSButton(title: "清空历史", target: self, action: #selector(clearHistory))
         clearBtn.bezelStyle = .rounded; clearBtn.font = .systemFont(ofSize: 11)
-        clearBtn.frame = CGRect(x: 640, y: 608, width: 96, height: 24)
+        clearBtn.frame = CGRect(x: h - 92, y: h - 92, width: 96, height: 24)
         panel.addSubview(clearBtn)
 
         historyTable = NSTableView()
@@ -489,15 +636,26 @@ class MainViewController: NSViewController {
         historyTable.rowHeight = 26
         historyTable.backgroundColor = NSColor(red: 0.07, green: 0.09, blue: 0.14, alpha: 1)
         historyTable.selectionHighlightStyle = .none
+        historyTable.columnAutoresizingStyle = .lastColumnOnlyAutoresizingStyle
 
-        let scroll = NSScrollView(frame: CGRect(x: 24, y: 40, width: 712, height: 550))
+        let scroll = NSScrollView(frame: CGRect(x: 24, y: 40, width: 712, height: h - 160))
         scroll.documentView = historyTable
         scroll.hasVerticalScroller = true; scroll.autohidesScrollers = true
+        scroll.autoresizingMask = [.width, .height]
         scroll.wantsLayer = true
         scroll.layer?.backgroundColor = NSColor(red: 0.07, green: 0.09, blue: 0.14, alpha: 1).cgColor
         scroll.layer?.cornerRadius = 10; scroll.layer?.borderWidth = 1
         scroll.layer?.borderColor = NSColor(red: 0.16, green: 0.22, blue: 0.3, alpha: 1).cgColor
         panel.addSubview(scroll)
+    }
+
+    private func relayoutHistoryPanel(contentW: CGFloat, contentH: CGFloat) {
+        let panel = panels[3]
+        let scrollW = min(contentW - 48, 712)
+        let scrollX = max((contentW - scrollW) / 2, 24)
+        if let scroll = panel.subviews.compactMap({ $0 as? NSScrollView }).first {
+            scroll.frame = CGRect(x: scrollX, y: 40, width: scrollW, height: contentH - 160)
+        }
     }
 
     @objc private func historyFilterChanged() { renderHistory() }
@@ -508,26 +666,41 @@ class MainViewController: NSViewController {
     // MARK: - 备份页
     private func setupBackupPanel() {
         let panel = panels[4]
+        let h = view.bounds.height
         let title = makeLabel("备份与快照回滚", size: 20, weight: .bold, color: .white)
-        title.frame = CGRect(x: 24, y: 650, width: 200, height: 30)
+        title.frame = CGRect(x: 24, y: h - 50, width: 200, height: 30)
         panel.addSubview(title)
         let sub = makeLabel("每次同步前自动创建备份快照，支持一键安全回滚", size: 11, weight: .regular, color: NSColor(white: 0.5, alpha: 1))
-        sub.frame = CGRect(x: 24, y: 628, width: 400, height: 18)
+        sub.frame = CGRect(x: 24, y: h - 72, width: 400, height: 18)
         panel.addSubview(sub)
 
         let refreshBtn = NSButton(title: "刷新", target: self, action: #selector(refreshBackups))
         refreshBtn.bezelStyle = .rounded; refreshBtn.font = .systemFont(ofSize: 11)
-        refreshBtn.frame = CGRect(x: 670, y: 628, width: 66, height: 24)
+        refreshBtn.frame = CGRect(x: h - 72, y: h - 72, width: 66, height: 24)
         panel.addSubview(refreshBtn)
 
-        backupList = NSScrollView(frame: CGRect(x: 24, y: 40, width: 712, height: 580))
+        backupList = NSScrollView(frame: CGRect(x: 24, y: 40, width: 712, height: h - 120))
         backupList.documentView = backupListView
         backupList.hasVerticalScroller = true; backupList.autohidesScrollers = true
+        backupList.autoresizingMask = [.width, .height]
         backupList.wantsLayer = true
         backupList.layer?.backgroundColor = NSColor(red: 0.07, green: 0.09, blue: 0.14, alpha: 1).cgColor
         backupList.layer?.cornerRadius = 10; backupList.layer?.borderWidth = 1
         backupList.layer?.borderColor = NSColor(red: 0.16, green: 0.22, blue: 0.3, alpha: 1).cgColor
         panel.addSubview(backupList)
+    }
+
+    private func relayoutBackupPanel(contentW: CGFloat, contentH: CGFloat) {
+        let panel = panels[4]
+        let scrollW = min(contentW - 48, 712)
+        let scrollX = max((contentW - scrollW) / 2, 24)
+        if let scroll = panel.subviews.compactMap({ $0 as? NSScrollView }).first {
+            scroll.frame = CGRect(x: scrollX, y: 40, width: scrollW, height: contentH - 120)
+        }
+        // refresh 按钮靠右
+        if let btn = panel.subviews.compactMap({ $0 as? NSButton }).first(where: { $0.title == "刷新" }) {
+            btn.frame = CGRect(x: scrollX + scrollW - 70, y: contentH - 72, width: 66, height: 24)
+        }
     }
 
     @objc private func refreshBackups() { renderBackups() }
@@ -588,11 +761,12 @@ class MainViewController: NSViewController {
     // MARK: - 审计页
     private func setupAuditPanel() {
         let panel = panels[5]
+        let h = view.bounds.height
         let title = makeLabel("安全与审计日志", size: 20, weight: .bold, color: .white)
-        title.frame = CGRect(x: 24, y: 650, width: 200, height: 30)
+        title.frame = CGRect(x: 24, y: h - 50, width: 200, height: 30)
         panel.addSubview(title)
         let sub = makeLabel("完整操作记录：同步、扫描、回滚、配置变更", size: 11, weight: .regular, color: NSColor(white: 0.5, alpha: 1))
-        sub.frame = CGRect(x: 24, y: 628, width: 400, height: 18)
+        sub.frame = CGRect(x: 24, y: h - 72, width: 400, height: 18)
         panel.addSubview(sub)
 
         auditTable = NSTableView()
@@ -605,10 +779,12 @@ class MainViewController: NSViewController {
         auditTable.rowHeight = 26
         auditTable.backgroundColor = NSColor(red: 0.07, green: 0.09, blue: 0.14, alpha: 1)
         auditTable.selectionHighlightStyle = .none
+        auditTable.columnAutoresizingStyle = .lastColumnOnlyAutoresizingStyle
 
-        let scroll = NSScrollView(frame: CGRect(x: 24, y: 40, width: 712, height: 580))
+        let scroll = NSScrollView(frame: CGRect(x: 24, y: 40, width: 712, height: h - 120))
         scroll.documentView = auditTable
         scroll.hasVerticalScroller = true; scroll.autohidesScrollers = true
+        scroll.autoresizingMask = [.width, .height]
         scroll.wantsLayer = true
         scroll.layer?.backgroundColor = NSColor(red: 0.07, green: 0.09, blue: 0.14, alpha: 1).cgColor
         scroll.layer?.cornerRadius = 10; scroll.layer?.borderWidth = 1
@@ -616,20 +792,37 @@ class MainViewController: NSViewController {
         panel.addSubview(scroll)
     }
 
+    private func relayoutAuditPanel(contentW: CGFloat, contentH: CGFloat) {
+        let panel = panels[5]
+        let scrollW = min(contentW - 48, 712)
+        let scrollX = max((contentW - scrollW) / 2, 24)
+        if let scroll = panel.subviews.compactMap({ $0 as? NSScrollView }).first {
+            scroll.frame = CGRect(x: scrollX, y: 40, width: scrollW, height: contentH - 120)
+            // 详情列宽度自适应
+            if let detailCol = auditTable.tableColumns.first(where: { $0.identifier.rawValue == "detail" }) {
+                detailCol.width = scrollW - 130 - 120 - 48
+            }
+        }
+    }
+
     private func renderAudit() { auditTable?.reloadData() }
 
     // MARK: - 设置页
     private func setupSettingsPanel() {
         let panel = panels[6]
+        let h = view.bounds.height
+        let w = view.bounds.width
+        let contentW = max(w - sidebarWidth, 400)
 
         // 整个设置页放入可滚动容器，彻底解决内容超高重叠问题
-        let outerScroll = NSScrollView(frame: CGRect(x: 24, y: 24, width: 712, height: 660))
+        let outerScroll = NSScrollView(frame: CGRect(x: 24, y: 24, width: contentW - 48, height: h - 48))
         outerScroll.hasVerticalScroller = true; outerScroll.autohidesScrollers = true
         outerScroll.drawsBackground = false
+        outerScroll.autoresizingMask = [.width, .height]
         panel.addSubview(outerScroll)
 
         let containerHeight: CGFloat = 880
-        let content = NSView(frame: CGRect(x: 0, y: 0, width: 700, height: containerHeight))
+        let content = NSView(frame: CGRect(x: 0, y: 0, width: contentW - 48, height: containerHeight))
         outerScroll.documentView = content
 
         let title = makeLabel("服务器与系统设置", size: 20, weight: .bold, color: .white)
@@ -749,6 +942,15 @@ class MainViewController: NSViewController {
         content.addSubview(igSaveBtn)
     }
 
+    private func relayoutSettingsPanel(contentW: CGFloat, contentH: CGFloat) {
+        let panel = panels[6]
+        let scrollW = min(contentW - 48, 712)
+        let scrollX = max((contentW - scrollW) / 2, 24)
+        if let scroll = panel.subviews.compactMap({ $0 as? NSScrollView }).first {
+            scroll.frame = CGRect(x: scrollX, y: 24, width: scrollW, height: contentH - 48)
+        }
+    }
+
     @objc private func testConnection() {
         connStatusLbl.stringValue = "⟳ 正在测试连接..."
         connStatusLbl.textColor = NSColor(red: 0, green: 0.7, blue: 1, alpha: 1)
@@ -863,7 +1065,12 @@ class MainViewController: NSViewController {
         if diff.total > 40 { lines += "  ... 还有 \(diff.total - 40) 个文件\n" }
         diffList.string = lines
         diffPanel.isHidden = false
-        diffPanel.frame = CGRect(x: 24, y: 320, width: 712, height: 160)
+        let panelW = min(contentView.bounds.width - 48, 712)
+        let panelX = max((contentView.bounds.width - panelW) / 2, 24)
+        diffPanel.frame = CGRect(x: panelX, y: 320, width: panelW, height: 160)
+        diffList.frame = CGRect(x: 14, y: 12, width: panelW - 168, height: 106)
+        confirmBtn.frame = CGRect(x: panelW - 132, y: 18, width: 118, height: 32)
+        cancelBtn.frame = CGRect(x: panelW - 132, y: 56, width: 118, height: 26)
 
         if !diff.conflicts.isEmpty {
             statusLabel.stringValue = "⚠️ 检测到 \(diff.conflicts.count) 个冲突文件，点击「开始同步」进入冲突解决"
@@ -883,7 +1090,7 @@ class MainViewController: NSViewController {
 
     private func hideDiff() {
         diffPanel.isHidden = true
-        diffPanel.frame = CGRect(x: 24, y: 320, width: 712, height: 0)
+        diffPanel.frame = CGRect(x: diffPanel.frame.origin.x, y: 320, width: diffPanel.frame.width, height: 0)
         currentDiff = nil
     }
 
@@ -919,7 +1126,9 @@ class MainViewController: NSViewController {
 
     private func showProgressPanel() {
         progressPanel.isHidden = false
-        progressPanel.frame = CGRect(x: 24, y: 320, width: 712, height: 150)
+        let panelW = min(contentView.bounds.width - 48, 712)
+        let panelX = max((contentView.bounds.width - panelW) / 2, 24)
+        progressPanel.frame = CGRect(x: panelX, y: 320, width: panelW, height: 150)
         progressBigBar.doubleValue = 0
         progressPctLbl.stringValue = "0%"
         progressFileLbl.stringValue = "等待开始..."
@@ -928,7 +1137,7 @@ class MainViewController: NSViewController {
 
     private func hideProgressPanel() {
         progressPanel.isHidden = true
-        progressPanel.frame = CGRect(x: 24, y: 320, width: 712, height: 0)
+        progressPanel.frame = CGRect(x: progressPanel.frame.origin.x, y: 320, width: progressPanel.frame.width, height: 0)
     }
 
     // MARK: - 同步流程

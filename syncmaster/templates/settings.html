@@ -1,0 +1,165 @@
+{%- extends "base.html" -%}
+{%- block title -%}设置 | SyncMaster{% endblock -%}
+{%- block content -%}
+<div class="page-header">
+    <div>
+        <h1>设置</h1>
+        <p>服务器连接、同步规则与偏好配置</p>
+    </div>
+    <div class="header-actions">
+        <button class="btn btn-sm btn-outline"><i class="fa fa-question-circle"></i> 帮助</button>
+    </div>
+</div>
+
+<!-- 服务器与系统设置 -->
+<div class="card">
+    <div class="card-header">
+        <h3>服务器与系统设置</h3>
+    </div>
+    <div class="card-body">
+        <div class="form-grid">
+            <div class="form-row">
+                <label class="form-label">跳板机 (user@host)</label>
+                <input type="text" class="form-input" value="ubuntu@54.160.252.171" placeholder="user@jump-host">
+            </div>
+            <div class="form-row">
+                <label class="form-label">跳板机密钥路径</label>
+                <input type="text" class="form-input" value="/Users/overspread/Documents/2api.pem" placeholder="/path/to/jump_key.pem">
+            </div>
+            <div class="form-row">
+                <label class="form-label">服务器用户</label>
+                <input type="text" class="form-input" value="opc" placeholder="remote_user">
+            </div>
+            <div class="form-row">
+                <label class="form-label">服务器地址</label>
+                <input type="text" class="form-input" value="155.248.172.187" placeholder="remote.host.ip">
+            </div>
+            <div class="form-row">
+                <label class="form-label">服务器密钥路径 (远程)</label>
+                <input type="text" class="form-input" value="/home/ubuntu/oci_opc_key.pem" placeholder="/path/on/jump/remote_key.pem">
+            </div>
+            <div class="form-row">
+                <label class="form-label">服务器目录</label>
+                <input type="text" class="form-input" value="/home/opc/.hermes" placeholder="/path/on/remote">
+            </div>
+            <div class="form-row">
+                <label class="form-label">本地目录</label>
+                <input type="text" class="form-input" value="/Users/overspread/.hermes" placeholder="/path/on/local">
+            </div>
+        </div>
+        <div class="form-actions" style="margin-top: 20px;">
+            <button class="btn btn-outline"><i class="fa fa-plug"></i> 测试连接</button>
+            <button class="btn btn-primary"><i class="fa fa-save"></i> 保存配置</button>
+        </div>
+    </div>
+</div>
+
+<!-- .env 环境变量同步策略 -->
+<div class="card">
+    <div class="card-header">
+        <h3>.env 环境变量同步策略</h3>
+        <div class="header-inline-actions">
+            <button class="btn btn-sm btn-outline"><i class="fa fa-refresh"></i> 刷新 Key 列表</button>
+            <button class="btn btn-sm btn-primary"><i class="fa fa-exchange"></i> 同步</button>
+        </div>
+    </div>
+    <div class="card-body">
+        <div class="toggle-row">
+            <div class="toggle-row-info">
+                <div class="toggle-row-title">启用 .env 智能同步</div>
+                <div class="toggle-row-desc">自动对比本地与远程 .env 差异，按配置进行合并</div>
+            </div>
+            <label class="toggle-switch"><input type="checkbox"><span></span></label>
+        </div>
+        <div class="env-table">
+            <table>
+                <thead>
+                    <tr>
+                        <th>KEY</th>
+                        <th>本地值</th>
+                        <th>远程值</th>
+                        <th style="width: 80px;">同步?</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><code>OPENAI_API_KEY</code></td>
+                        <td>sk-****abc</td>
+                        <td>sk-****abc</td>
+                        <td><label class="toggle-switch"><input type="checkbox" checked><span></span></label></td>
+                    </tr>
+                    <tr>
+                        <td><code>DATABASE_URL</code></td>
+                        <td>postgres://localhost</td>
+                        <td>postgres://remote-db</td>
+                        <td><label class="toggle-switch"><input type="checkbox"><span></span></label></td>
+                    </tr>
+                    <tr>
+                        <td><code>REDIS_URL</code></td>
+                        <td>redis://localhost:6379</td>
+                        <td>redis://remote-cache:6379</td>
+                        <td><label class="toggle-switch"><input type="checkbox"><span></span></label></td>
+                    </tr>
+                    <tr>
+                        <td><code>LOG_LEVEL</code></td>
+                        <td>debug</td>
+                        <td>info</td>
+                        <td><label class="toggle-switch"><input type="checkbox" checked><span></span></label></td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- .syncignore 规则编辑器 -->
+<div class="card">
+    <div class="card-header">
+        <h3>.syncignore 规则编辑器</h3>
+    </div>
+    <div class="card-body">
+        <div style="font-size: 11px; color: #6b7b8d; margin-bottom: 10px;">
+            每行一条规则，支持通配符 *。目录加 / 结尾
+        </div>
+        <div class="code-editor">
+            <textarea class="form-textarea" spellcheck="false">.env
+.env.local
+.env.production
+.env.server
+bot_id
+bot_id.json
+secrets/
+*.key
+*.pem
+__pycache__/
+*.pyc
+node_modules/
+.DS_Store
+.idea/
+.vscode/
+*.log
+logs/
+tmp/
+temp/
+*.swp
+*.swo
+*~
+</textarea>
+        </div>
+        <div class="form-actions" style="margin-top: 16px;">
+            <button class="btn btn-primary"><i class="fa fa-save"></i> 保存规则</button>
+        </div>
+    </div>
+</div>
+
+<style>
+code {
+    font-family: "SF Mono", Menlo, monospace;
+    font-size: 11px;
+    background: rgba(0, 120, 212, 0.1);
+    color: #4dabf7;
+    padding: 2px 6px;
+    border-radius: 3px;
+}
+</style>
+{% endblock -%}

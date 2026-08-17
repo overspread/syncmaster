@@ -19,9 +19,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         window = NSWindow(contentViewController: MainViewController())
         window.title = "SyncMaster"
         window.appearance = NSAppearance(named: .darkAqua)
-        window.setFrame(NSRect(x: 0, y: 0, width: 1000, height: 710), display: false)
+        window.setFrame(NSRect(x: 0, y: 0, width: 1100, height: 750), display: false)
         window.center()
         window.setFrameAutosaveName("SyncMasterWindow")
+        window.contentMinSize = NSSize(width: 820, height: 600)
         window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
     }

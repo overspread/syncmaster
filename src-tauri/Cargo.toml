@@ -1,0 +1,25 @@
+[package]
+name = "syncmaster-tauri"
+version = "1.0.0"
+description = "SyncMaster - Cross-platform Hermes sync manager (Tauri shell)"
+authors = ["you"]
+edition = "2021"
+rust-version = "1.77"
+
+[[bin]]
+name = "syncmaster"
+path = "src/main.rs"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = ["protocol-asset", "custom-protocol", "native-tls", "tracing"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "time"] }
+anyhow = "1"
+
+[features]
+default = ["custom-protocol"]
+custom-protocol = ["tauri/custom-protocol"]

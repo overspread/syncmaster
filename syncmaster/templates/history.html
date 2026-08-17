@@ -1,0 +1,82 @@
+{%- extends "base.html" -%}
+{%- block title -%}历史记录 | SyncMaster{% endblock -%}
+{%- block content -%}
+<div class="page-header">
+    <div>
+        <h1>同步历史记录</h1>
+        <p>完整的同步操作记录与结果追踪</p>
+    </div>
+    <div class="header-actions">
+        <select class="form-select" id="history-filter" style="width:auto;min-width:130px;" onchange="loadHistory()">
+            <option value="0">全部</option>
+            <option value="1">今天</option>
+            <option value="2">最近 7 天</option>
+            <option value="3">最近 30 天</option>
+        </select>
+        <button class="btn btn-sm btn-danger-outline" onclick="clearHistory()"><i class="fa fa-trash"></i> 清空历史</button>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-body" style="padding:0;">
+        <table>
+            <thead>
+                <tr>
+                    <th style="width:130px;">时间</th>
+                    <th style="width:120px;">分类</th>
+                    <th style="width:120px;">方向</th>
+                    <th style="width:70px;">文件数</th>
+                    <th style="width:70px;">耗时</th>
+                    <th style="width:80px;">结果</th>
+                </tr>
+            </thead>
+            <tbody id="history-tbody">
+                <tr><td colspan="6" style="text-align:center;padding:40px;color:#6b7b8d;">加载中...</td></tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<div id="history-empty" class="empty-state" style="display:none;">
+    <i class="fa fa-history"></i>
+    <p>暂无同步历史</p>
+</div>
+
+<script>
+async function loadHistory() {
+    const filter = document.getElementById('history-filter').value;
+    const resp = await fetch('/api/history?filter=' + filter);
+    const entries = await resp.json();
+    const tbody = document.getElementById('history-tbody');
+    const empty = document.getElementById('history-empty');
+    if (!entries.length) {
+        tbody.innerHTML = '';
+        empty.style.display = 'flex';
+        return;
+    }
+    empty.style.display = 'none';
+    tbody.innerHTML = entries.map(e => `
+        <tr>
+            <td>${e.time}</td>
+            <td>${e.category}</td>
+            <td style="color:#4dabf7;">${e.direction}</td>
+            <td>${e.fileCount}</td>
+            <td>${e.duration || '-'}</td>
+            <td>
+                ${e.result === '成功'
+                    ? '<span class="status-ok"><i class="fa fa-check"></i> 成功</span>'
+                    : '<span class="status-fail"><i class="fa fa-times"></i> 失败</span>'}
+            </td>
+        </tr>
+    `).join('');
+}
+
+async function clearHistory() {
+    if (!confirm('确认清空所有历史记录？此操作不可撤销。')) return;
+    await fetch('/api/history/clear', { method: 'POST' });
+    loadHistory();
+}
+
+loadHistory();
+</script>
+{% endblock -%}

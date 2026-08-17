@@ -1,0 +1,112 @@
+{%- extends "base.html" -%}
+{%- block title -%}监控面板 | SyncMaster{% endblock -%}
+{%- block content -%}
+<div class="page-header">
+    <div>
+        <h1>实时监控面板</h1>
+        <p>同步进度、速率、文件处理实时状态</p>
+    </div>
+    <div class="header-actions">
+        <button class="btn btn-sm btn-success" onclick="runSync('push')"><i class="fa fa-play"></i> 开始同步</button>
+        <button class="btn btn-sm btn-danger-outline" onclick="cancelSync()"><i class="fa fa-stop"></i> 停止</button>
+    </div>
+</div>
+
+<!-- 监控指标 -->
+<div class="monitor-grid">
+    <div class="stat-card">
+        <i class="fa fa-tachometer stat-icon"></i>
+        <div class="stat-content">
+            <div class="stat-value" id="mon-speed">0 KB/s</div>
+            <div class="stat-label">实时速率</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <i class="fa fa-file-text stat-icon"></i>
+        <div class="stat-content">
+            <div class="stat-value" id="mon-done">0/0</div>
+            <div class="stat-label">已处理文件</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <i class="fa fa-check-circle stat-icon"></i>
+        <div class="stat-content">
+            <div class="stat-value" id="mon-percent">0%</div>
+            <div class="stat-label">完成进度</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <i class="fa fa-clock-o stat-icon"></i>
+        <div class="stat-content">
+            <div class="stat-value" id="mon-eta">--:--</div>
+            <div class="stat-label">预计剩余</div>
+        </div>
+    </div>
+</div>
+
+<!-- 进度条 -->
+<div class="card">
+    <div class="card-header">
+        <h3>同步进度</h3>
+        <span class="monitor-status" id="mon-status">就绪</span>
+    </div>
+    <div class="card-body">
+        <div class="progress-bar-wrap">
+            <div class="progress-bar-fill" id="mon-progress" style="width:0%;"></div>
+        </div>
+        <div class="progress-current-file" id="mon-current">等待开始...</div>
+        <div class="progress-counters">
+            <span class="counter-up"><i class="fa fa-arrow-up"></i> <span id="mon-up">0</span></span>
+            <span class="counter-down"><i class="fa fa-arrow-down"></i> <span id="mon-down">0</span></span>
+        </div>
+    </div>
+</div>
+
+<!-- 实时日志 -->
+<div class="card">
+    <div class="card-header">
+        <h3>同步执行日志</h3>
+        <button class="btn btn-sm btn-outline" onclick="clearLog()"><i class="fa fa-eraser"></i> 清空</button>
+    </div>
+    <div class="card-body" style="padding:0;">
+        <div id="live-log" class="live-log-area"></div>
+    </div>
+</div>
+
+<script>
+// 定时拉取监控数据
+async function loadMonitorData() {
+    const resp = await fetch('/api/monitor');
+    const d = await resp.json();
+    document.getElementById('mon-speed').textContent = d.speed || '0 KB/s';
+    document.getElementById('mon-done').textContent = `${d.done || 0}/${Math.max(d.total || 0, d.done || 0)}`;
+    document.getElementById('mon-percent').textContent = `${Math.round(d.percent || 0)}%`;
+    document.getElementById('mon-eta').textContent = d.eta || '--:--';
+    document.getElementById('mon-status').textContent = d.status || '就绪';
+    document.getElementById('mon-progress').style.width = `${d.percent || 0}%`;
+    document.getElementById('mon-current').textContent = d.currentFile || '等待开始...';
+    document.getElementById('mon-up').textContent = d.uploaded || 0;
+    document.getElementById('mon-down').textContent = d.downloaded || 0;
+
+    // 状态颜色
+    const statusEl = document.getElementById('mon-status');
+    statusEl.className = 'monitor-status';
+    if ((d.status || '').includes('完成') || (d.status || '').includes('成功')) {
+        statusEl.classList.add('status-success');
+    } else if ((d.status || '').includes('失败') || (d.status || '').includes('取消')) {
+        statusEl.classList.add('status-fail');
+    } else if ((d.status || '').includes('中')) {
+        statusEl.classList.add('status-running');
+    }
+}
+
+function clearLog() {
+    document.getElementById('live-log').textContent = '';
+}
+
+// 初始加载
+loadMonitorData();
+// 每 2 秒刷新
+setInterval(loadMonitorData, 2000);
+</script>
+{% endblock -%}

@@ -7,15 +7,15 @@
         <p>本地 ↔ 服务器 智能同步管理</p>
     </div>
     <div class="header-actions">
-        <button class="btn btn-sm btn-outline"><i class="fas fa-bell"></i></button>
-        <button class="btn btn-primary btn-sm"><i class="fas fa-bolt"></i> 快速同步 <i class="fas fa-chevron-down ml-1"></i></button>
+        <button class="btn btn-sm btn-outline"><i class="fa fa-bell"></i></button>
+        <button class="btn btn-primary btn-sm"><i class="fa fa-bolt"></i> 快速同步 <i class="fa fa-chevron-down ml-1"></i></button>
     </div>
 </div>
 
 <!-- Connection Status -->
 <div class="status-card">
     <div class="device-info">
-        <i class="fas fa-desktop device-icon"></i>
+        <i class="fa fa-desktop device-icon"></i>
         <div>
             <div class="device-name">MacBook Pro</div>
             <div class="device-status"><span class="dot online"></span>在线</div>
@@ -24,13 +24,13 @@
     </div>
     <div class="sync-arrow">
         <div class="sync-ring">
-            <i class="fas fa-sync-alt fa-spin"></i>
+            <i class="fa fa-sync-alt fa-spin"></i>
         </div>
         <div class="sync-label">智能双向同步</div>
         <div class="sync-time">2 分钟前完成</div>
     </div>
     <div class="device-info">
-        <i class="fas fa-server device-icon"></i>
+        <i class="fa fa-server device-icon"></i>
         <div>
             <div class="device-name">Ubuntu 24.04</div>
             <div class="device-status"><span class="dot online"></span>在线</div>
@@ -41,32 +41,40 @@
 
 <!-- Action Buttons -->
 <div class="action-row">
-    <button class="btn btn-lg btn-primary" onclick="runSync('push')"><i class="fas fa-upload"></i> 同步到服务器</button>
-    <button class="btn btn-lg btn-success" onclick="runSync('pull')"><i class="fas fa-download"></i> 同步到本地</button>
-    <button class="btn btn-lg btn-purple" onclick="runSync('bidirectional')"><i class="fas fa-arrows-alt-h"></i> 智能双向同步</button>
+    <button class="btn btn-lg btn-primary" onclick="runSync('push')"><i class="fa fa-upload"></i> 同步到服务器</button>
+    <button class="btn btn-lg btn-success" onclick="runSync('pull')"><i class="fa fa-download"></i> 同步到本地</button>
+    <button class="btn btn-lg btn-purple" onclick="runSync('bidirectional')"><i class="fa fa-arrows-alt-h"></i> 智能双向同步</button>
 </div>
 
 <!-- Stats Cards -->
 <div class="stats-row">
     <div class="stat-card">
-        <i class="fas fa-folder-open stat-icon"></i>
-        <div class="stat-value" id="stat-files">12,458</div>
-        <div class="stat-label">总文件数 <span class="stat-up">+128</span></div>
+        <i class="fa fa-folder-open stat-icon"></i>
+        <div class="stat-content">
+            <div class="stat-value" id="stat-files">12,458</div>
+            <div class="stat-label">总文件数 <span class="stat-up">+128</span></div>
+        </div>
     </div>
     <div class="stat-card">
-        <i class="fas fa-hourglass-half stat-icon"></i>
-        <div class="stat-value" id="stat-pending">23</div>
-        <div class="stat-label">待同步文件</div>
+        <i class="fa fa-hourglass-half stat-icon"></i>
+        <div class="stat-content">
+            <div class="stat-value" id="stat-pending">23</div>
+            <div class="stat-label">待同步文件</div>
+        </div>
     </div>
     <div class="stat-card">
-        <i class="fas fa-clock stat-icon"></i>
-        <div class="stat-value">128h</div>
-        <div class="stat-label">累计节省时间</div>
+        <i class="fa fa-clock stat-icon"></i>
+        <div class="stat-content">
+            <div class="stat-value">128h</div>
+            <div class="stat-label">累计节省时间</div>
+        </div>
     </div>
     <div class="stat-card">
-        <i class="fas fa-check-circle stat-icon"></i>
-        <div class="stat-value">99.6%</div>
-        <div class="stat-label">成功率 (278次)</div>
+        <i class="fa fa-check-circle stat-icon"></i>
+        <div class="stat-content">
+            <div class="stat-value">99.6%</div>
+            <div class="stat-label">成功率 (278次)</div>
+        </div>
     </div>
 </div>
 
@@ -76,41 +84,41 @@
         <div class="card">
             <div class="card-header">
                 <h3>同步分类</h3>
-                <button class="btn btn-sm btn-outline"><i class="fas fa-plus"></i> 新建分类</button>
+                <button class="btn btn-sm btn-outline"><i class="fa fa-plus"></i> 新建分类</button>
             </div>
             <div class="card-body">
                 <div class="sync-item">
                     <label class="toggle-switch"><input type="checkbox" checked><span></span></label>
                     <div class="sync-item-info">
-                        <div class="sync-item-name"><i class="fas fa-cube"></i> 核心配置</div>
+                        <div class="sync-item-name"><i class="fa fa-cube"></i> 核心配置</div>
                         <div class="sync-item-path">config.yaml, MEMORY.md, USER.md, SOUL.md</div>
                     </div>
                 </div>
                 <div class="sync-item">
                     <label class="toggle-switch"><input type="checkbox" checked><span></span></label>
                     <div class="sync-item-info">
-                        <div class="sync-item-name"><i class="fas fa-book"></i> 技能库</div>
+                        <div class="sync-item-name"><i class="fa fa-book"></i> 技能库</div>
                         <div class="sync-item-path">skills/</div>
                     </div>
                 </div>
                 <div class="sync-item">
                     <label class="toggle-switch"><input type="checkbox" checked><span></span></label>
                     <div class="sync-item-info">
-                        <div class="sync-item-name"><i class="fas fa-clock"></i> 定时任务</div>
+                        <div class="sync-item-name"><i class="fa fa-clock"></i> 定时任务</div>
                         <div class="sync-item-path">cron/</div>
                     </div>
                 </div>
                 <div class="sync-item">
                     <label class="toggle-switch"><input type="checkbox" checked><span></span></label>
                     <div class="sync-item-info">
-                        <div class="sync-item-name"><i class="fas fa-puzzle-piece"></i> 插件</div>
+                        <div class="sync-item-name"><i class="fa fa-puzzle-piece"></i> 插件</div>
                         <div class="sync-item-path">plugins/, desktop-plugins/</div>
                     </div>
                 </div>
                 <div class="sync-item">
                     <label class="toggle-switch"><input type="checkbox"><span></span></label>
                     <div class="sync-item-info">
-                        <div class="sync-item-name"><i class="fas fa-database"></i> 会话数据</div>
+                        <div class="sync-item-name"><i class="fa fa-database"></i> 会话数据</div>
                         <div class="sync-item-path">state.db</div>
                     </div>
                 </div>
@@ -131,23 +139,23 @@
         <div class="card">
             <div class="card-header">
                 <h3>差异预览</h3>
-                <button class="btn btn-sm btn-outline"><i class="fas fa-refresh"></i></button>
+                <button class="btn btn-sm btn-outline"><i class="fa fa-refresh"></i></button>
             </div>
-            <div class="card-body">
+            <div class="card-body" style="padding-bottom: 0;">
                 <table class="diff-table">
                     <thead><tr><th>文件</th><th>类型</th><th>本地</th><th>远程</th><th>操作</th></tr></thead>
                     <tbody>
-                        <tr><td>config.yaml</td><td><span class="badge badge-modified">修改</span></td><td>08:30</td><td>07:15</td><td><i class="fas fa-arrow-right text-primary"></i></td></tr>
-                        <tr><td>MEMORY.md</td><td><span class="badge badge-modified">修改</span></td><td>08:30</td><td>06:10</td><td><i class="fas fa-arrow-right text-primary"></i></td></tr>
-                        <tr><td>SOUL.md</td><td><span class="badge badge-new">新增</span></td><td>08:30</td><td>—</td><td><i class="fas fa-arrow-right text-primary"></i></td></tr>
-                        <tr><td>skills/web-sync/</td><td><span class="badge badge-new">新增</span></td><td>08:30</td><td>—</td><td><i class="fas fa-arrow-right text-primary"></i></td></tr>
+                        <tr><td>config.yaml</td><td><span class="badge badge-modified">修改</span></td><td>08:30</td><td>07:15</td><td><i class="fa fa-arrow-right text-primary"></i></td></tr>
+                        <tr><td>MEMORY.md</td><td><span class="badge badge-modified">修改</span></td><td>08:30</td><td>06:10</td><td><i class="fa fa-arrow-right text-primary"></i></td></tr>
+                        <tr><td>SOUL.md</td><td><span class="badge badge-new">新增</span></td><td>08:30</td><td>—</td><td><i class="fa fa-arrow-right text-primary"></i></td></tr>
+                        <tr><td>skills/web-sync/</td><td><span class="badge badge-new">新增</span></td><td>08:30</td><td>—</td><td><i class="fa fa-arrow-right text-primary"></i></td></tr>
                         <tr><td>logs/gateway.log</td><td><span class="badge badge-ignored">忽略</span></td><td>08:45</td><td>08:40</td><td>—</td></tr>
                     </tbody>
                 </table>
-                <div class="card-footer">
-                    <button class="btn btn-sm btn-outline">取消</button>
-                    <button class="btn btn-sm btn-primary" onclick="runSync('push')"><i class="fas fa-play"></i> 开始同步</button>
-                </div>
+            </div>
+            <div class="card-footer">
+                <button class="btn btn-sm btn-outline">取消</button>
+                <button class="btn btn-sm btn-primary" onclick="runSync('push')"><i class="fa fa-play"></i> 开始同步</button>
             </div>
         </div>
 
@@ -159,11 +167,11 @@
                 <table class="history-table">
                     <thead><tr><th>时间</th><th>方向</th><th>文件</th><th>状态</th></tr></thead>
                     <tbody>
-                        <tr><td>今天 08:30</td><td>本地 → 服务器</td><td>128个</td><td><span class="status-ok"><i class="fas fa-check"></i></span></td></tr>
-                        <tr><td>昨天 22:15</td><td>服务器 → 本地</td><td>1个</td><td><span class="status-ok"><i class="fas fa-check"></i></span></td></tr>
-                        <tr><td>08-12 14:00</td><td>本地 → 服务器</td><td>45个</td><td><span class="status-ok"><i class="fas fa-check"></i></span></td></tr>
-                        <tr><td>08-11 09:30</td><td>智能双向</td><td>8个</td><td><span class="status-ok"><i class="fas fa-check"></i></span></td></tr>
-                        <tr><td>08-10 16:45</td><td>本地 → 服务器</td><td>3个</td><td><span class="status-fail"><i class="fas fa-times"></i></span></td></tr>
+                        <tr><td>今天 08:30</td><td>本地 → 服务器</td><td>128个</td><td><span class="status-ok"><i class="fa fa-check"></i></span></td></tr>
+                        <tr><td>昨天 22:15</td><td>服务器 → 本地</td><td>1个</td><td><span class="status-ok"><i class="fa fa-check"></i></span></td></tr>
+                        <tr><td>08-12 14:00</td><td>本地 → 服务器</td><td>45个</td><td><span class="status-ok"><i class="fa fa-check"></i></span></td></tr>
+                        <tr><td>08-11 09:30</td><td>智能双向</td><td>8个</td><td><span class="status-ok"><i class="fa fa-check"></i></span></td></tr>
+                        <tr><td>08-10 16:45</td><td>本地 → 服务器</td><td>3个</td><td><span class="status-fail"><i class="fa fa-times"></i></span></td></tr>
                     </tbody>
                 </table>
             </div>

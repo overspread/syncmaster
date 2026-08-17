@@ -1,0 +1,63 @@
+{%- extends "base.html" -%}
+{%- block title -%}审计日志 | SyncMaster{% endblock -%}
+{%- block content -%}
+<div class="page-header">
+    <div>
+        <h1>安全与审计日志</h1>
+        <p>完整操作记录：同步、扫描、回滚、配置变更</p>
+    </div>
+    <div class="header-actions">
+        <button class="btn btn-sm btn-outline" onclick="loadAudit()"><i class="fa fa-refresh"></i> 刷新</button>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-body" style="padding:0;">
+        <table>
+            <thead>
+                <tr>
+                    <th style="width:130px;">时间</th>
+                    <th style="width:140px;">操作</th>
+                    <th>详情</th>
+                </tr>
+            </thead>
+            <tbody id="audit-tbody">
+                <tr><td colspan="3" style="text-align:center;padding:40px;color:#6b7b8d;">加载中...</td></tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<div id="audit-empty" class="empty-state" style="display:none;">
+    <i class="fa fa-file-text-o"></i>
+    <p>暂无审计日志</p>
+</div>
+
+<script>
+async function loadAudit() {
+    const resp = await fetch('/api/audit');
+    const entries = await resp.json();
+    const tbody = document.getElementById('audit-tbody');
+    const empty = document.getElementById('audit-empty');
+    if (!entries.length) {
+        tbody.innerHTML = '';
+        empty.style.display = 'flex';
+        return;
+    }
+    empty.style.display = 'none';
+    tbody.innerHTML = entries.map(e => {
+        let actionClass = '';
+        if (e.action.includes('成功')) actionClass = 'text-success';
+        else if (e.action.includes('失败') || e.action.includes('取消') || e.action.includes('删除')) actionClass = 'text-danger';
+        return `
+        <tr>
+            <td>${e.time}</td>
+            <td class="${actionClass}">${e.action}</td>
+            <td style="color:#8899aa;">${e.detail || '-'}</td>
+        </tr>`;
+    }).join('');
+}
+
+loadAudit();
+</script>
+{% endblock -%}
