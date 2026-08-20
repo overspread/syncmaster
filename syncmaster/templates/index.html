@@ -3,12 +3,11 @@
 {%- block content -%}
 <div class="page-header">
     <div>
-        <h1>概览</h1>
+        <h1>概览 <span id="autoSyncBadge" style="display:none;font-size:11px;font-weight:600;color:#1ca672;background:rgba(28,166,114,.14);padding:2px 8px;border-radius:12px;vertical-align:middle;">自动同步中</span></h1>
         <p>本地 ↔ 服务器 智能同步管理</p>
     </div>
     <div class="header-actions">
-        <button class="btn btn-sm btn-outline"><i class="fa fa-bell"></i></button>
-        <button class="btn btn-primary btn-sm"><i class="fa fa-bolt"></i> 快速同步 <i class="fa fa-chevron-down ml-1"></i></button>
+        <button class="btn btn-primary btn-sm" onclick="runSync('bidirectional', this)"><i class="fa fa-bolt"></i> 快速同步</button>
     </div>
 </div>
 
@@ -17,33 +16,40 @@
     <div class="device-info">
         <i class="fa fa-desktop device-icon"></i>
         <div>
-            <div class="device-name">MacBook Pro</div>
+            <div class="device-name" id="local-name">本地设备</div>
             <div class="device-status"><span class="dot online"></span>在线</div>
-            <div class="device-path">/Users/overspread/.hermes</div>
+            <div class="device-path" id="local-path">加载中...</div>
         </div>
     </div>
     <div class="sync-arrow">
         <div class="sync-ring">
-            <i class="fa fa-sync-alt fa-spin"></i>
+            <i class="fa fa-sync-alt"></i>
         </div>
         <div class="sync-label">智能双向同步</div>
-        <div class="sync-time">2 分钟前完成</div>
+        <div class="sync-time" id="last-sync-time">-</div>
     </div>
     <div class="device-info">
         <i class="fa fa-server device-icon"></i>
         <div>
-            <div class="device-name">Ubuntu 24.04</div>
-            <div class="device-status"><span class="dot online"></span>在线</div>
-            <div class="device-path">/home/opc/.hermes</div>
+            <div class="device-name" id="remote-name">服务器</div>
+            <div class="device-status" id="remote-status"><span class="dot"></span>检测中</div>            <div class="device-path" id="remote-path">-</div>
         </div>
     </div>
 </div>
 
 <!-- Action Buttons -->
 <div class="action-row">
-    <button class="btn btn-lg btn-primary" onclick="runSync('push')"><i class="fa fa-upload"></i> 同步到服务器</button>
-    <button class="btn btn-lg btn-success" onclick="runSync('pull')"><i class="fa fa-download"></i> 同步到本地</button>
-    <button class="btn btn-lg btn-purple" onclick="runSync('bidirectional')"><i class="fa fa-arrows-alt-h"></i> 智能双向同步</button>
+    <button class="btn btn-lg btn-primary" onclick="runSync('push', this)"><i class="fa fa-upload"></i> 同步到服务器</button>
+    <button class="btn btn-lg btn-success" onclick="runSync('pull', this)"><i class="fa fa-download"></i> 同步到本地</button>
+    <button class="btn btn-lg btn-purple" onclick="runSync('bidirectional', this)"><i class="fa fa-arrows-alt-h"></i> 智能双向同步</button>
+</div>
+
+<!-- 同步状态条 -->
+<div class="sync-status-bar" id="sync-status-bar" style="display:none;">
+    <i class="fa" id="sync-status-icon"></i>
+    <span id="sync-status-text"></span>
+    <span class="sync-status-time" id="sync-status-time"></span>
+    <button class="btn btn-sm btn-outline sync-status-close" onclick="document.getElementById('sync-status-bar').style.display='none'"><i class="fa fa-times"></i></button>
 </div>
 
 <!-- Stats Cards -->
@@ -51,29 +57,30 @@
     <div class="stat-card">
         <i class="fa fa-folder-open stat-icon"></i>
         <div class="stat-content">
-            <div class="stat-value" id="stat-files">12,458</div>
-            <div class="stat-label">总文件数 <span class="stat-up">+128</span></div>
+            <div class="stat-value" id="stat-files">-</div>
+            <div class="stat-label">总文件数</div>
         </div>
     </div>
     <div class="stat-card">
         <i class="fa fa-hourglass-half stat-icon"></i>
         <div class="stat-content">
-            <div class="stat-value" id="stat-pending">23</div>
-            <div class="stat-label">待同步文件</div>
-        </div>
-    </div>
-    <div class="stat-card">
-        <i class="fa fa-clock stat-icon"></i>
-        <div class="stat-content">
-            <div class="stat-value">128h</div>
-            <div class="stat-label">累计节省时间</div>
+            <div class="stat-value" id="stat-pending">-</div>
+            <div class="stat-label" id="stat-pending-label">待同步文件</div>
+            <div class="stat-detail" id="stat-pending-detail" style="font-size:11px;color:#6b7b8d;margin-top:2px;"></div>
         </div>
     </div>
     <div class="stat-card">
         <i class="fa fa-check-circle stat-icon"></i>
         <div class="stat-content">
-            <div class="stat-value">99.6%</div>
-            <div class="stat-label">成功率 (278次)</div>
+            <div class="stat-value" id="stat-success-rate">-</div>
+            <div class="stat-label">成功率</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <i class="fa fa-database stat-icon"></i>
+        <div class="stat-content">
+            <div class="stat-value" id="stat-size">-</div>
+            <div class="stat-label">本地总大小</div>
         </div>
     </div>
 </div>
@@ -84,53 +91,10 @@
         <div class="card">
             <div class="card-header">
                 <h3>同步分类</h3>
-                <button class="btn btn-sm btn-outline"><i class="fa fa-plus"></i> 新建分类</button>
+                <a href="/categories" class="btn btn-sm btn-outline"><i class="fa fa-plus"></i> 管理</a>
             </div>
-            <div class="card-body">
-                <div class="sync-item">
-                    <label class="toggle-switch"><input type="checkbox" checked><span></span></label>
-                    <div class="sync-item-info">
-                        <div class="sync-item-name"><i class="fa fa-cube"></i> 核心配置</div>
-                        <div class="sync-item-path">config.yaml, MEMORY.md, USER.md, SOUL.md</div>
-                    </div>
-                </div>
-                <div class="sync-item">
-                    <label class="toggle-switch"><input type="checkbox" checked><span></span></label>
-                    <div class="sync-item-info">
-                        <div class="sync-item-name"><i class="fa fa-book"></i> 技能库</div>
-                        <div class="sync-item-path">skills/</div>
-                    </div>
-                </div>
-                <div class="sync-item">
-                    <label class="toggle-switch"><input type="checkbox" checked><span></span></label>
-                    <div class="sync-item-info">
-                        <div class="sync-item-name"><i class="fa fa-clock"></i> 定时任务</div>
-                        <div class="sync-item-path">cron/</div>
-                    </div>
-                </div>
-                <div class="sync-item">
-                    <label class="toggle-switch"><input type="checkbox" checked><span></span></label>
-                    <div class="sync-item-info">
-                        <div class="sync-item-name"><i class="fa fa-puzzle-piece"></i> 插件</div>
-                        <div class="sync-item-path">plugins/, desktop-plugins/</div>
-                    </div>
-                </div>
-                <div class="sync-item">
-                    <label class="toggle-switch"><input type="checkbox"><span></span></label>
-                    <div class="sync-item-info">
-                        <div class="sync-item-name"><i class="fa fa-database"></i> 会话数据</div>
-                        <div class="sync-item-path">state.db</div>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <div class="card">
-            <div class="card-header">
-                <h3>近 7 天同步趋势</h3>
-            </div>
-            <div class="card-body">
-                <canvas id="trendChart" height="180"></canvas>
+            <div class="card-body" id="overview-categories">
+                <div style="text-align:center;color:#6b7b8d;padding:20px;">加载中...</div>
             </div>
         </div>
     </div>
@@ -138,40 +102,13 @@
     <div class="col">
         <div class="card">
             <div class="card-header">
-                <h3>差异预览</h3>
-                <button class="btn btn-sm btn-outline"><i class="fa fa-refresh"></i></button>
+                <h3>最近同步</h3>
             </div>
-            <div class="card-body" style="padding-bottom: 0;">
-                <table class="diff-table">
-                    <thead><tr><th>文件</th><th>类型</th><th>本地</th><th>远程</th><th>操作</th></tr></thead>
-                    <tbody>
-                        <tr><td>config.yaml</td><td><span class="badge badge-modified">修改</span></td><td>08:30</td><td>07:15</td><td><i class="fa fa-arrow-right text-primary"></i></td></tr>
-                        <tr><td>MEMORY.md</td><td><span class="badge badge-modified">修改</span></td><td>08:30</td><td>06:10</td><td><i class="fa fa-arrow-right text-primary"></i></td></tr>
-                        <tr><td>SOUL.md</td><td><span class="badge badge-new">新增</span></td><td>08:30</td><td>—</td><td><i class="fa fa-arrow-right text-primary"></i></td></tr>
-                        <tr><td>skills/web-sync/</td><td><span class="badge badge-new">新增</span></td><td>08:30</td><td>—</td><td><i class="fa fa-arrow-right text-primary"></i></td></tr>
-                        <tr><td>logs/gateway.log</td><td><span class="badge badge-ignored">忽略</span></td><td>08:45</td><td>08:40</td><td>—</td></tr>
-                    </tbody>
-                </table>
-            </div>
-            <div class="card-footer">
-                <button class="btn btn-sm btn-outline">取消</button>
-                <button class="btn btn-sm btn-primary" onclick="runSync('push')"><i class="fa fa-play"></i> 开始同步</button>
-            </div>
-        </div>
-
-        <div class="card">
-            <div class="card-header">
-                <h3>同步历史</h3>
-            </div>
-            <div class="card-body">
+            <div class="card-body" style="padding:0;">
                 <table class="history-table">
                     <thead><tr><th>时间</th><th>方向</th><th>文件</th><th>状态</th></tr></thead>
-                    <tbody>
-                        <tr><td>今天 08:30</td><td>本地 → 服务器</td><td>128个</td><td><span class="status-ok"><i class="fa fa-check"></i></span></td></tr>
-                        <tr><td>昨天 22:15</td><td>服务器 → 本地</td><td>1个</td><td><span class="status-ok"><i class="fa fa-check"></i></span></td></tr>
-                        <tr><td>08-12 14:00</td><td>本地 → 服务器</td><td>45个</td><td><span class="status-ok"><i class="fa fa-check"></i></span></td></tr>
-                        <tr><td>08-11 09:30</td><td>智能双向</td><td>8个</td><td><span class="status-ok"><i class="fa fa-check"></i></span></td></tr>
-                        <tr><td>08-10 16:45</td><td>本地 → 服务器</td><td>3个</td><td><span class="status-fail"><i class="fa fa-times"></i></span></td></tr>
+                    <tbody id="overview-history">
+                        <tr><td colspan="4" style="text-align:center;color:#6b7b8d;padding:20px;">加载中...</td></tr>
                     </tbody>
                 </table>
             </div>
@@ -180,26 +117,180 @@
 </div>
 
 <script>
-const chart = new Chart(document.getElementById('trendChart'), {
-    type: 'line',
-    data: {
-        labels: ['08/07', '08/08', '08/09', '08/10', '08/11', '08/12', '08/13'],
-        datasets: [{
-            label: '同步文件数',
-            data: [12, 35, 8, 45, 3, 8, 128],
-            borderColor: '#0078d4',
-            backgroundColor: 'rgba(0, 120, 212, 0.1)',
-            fill: true, tension: 0.4, pointRadius: 4
-        }]
-    },
-    options: {
-        responsive: true,
-        plugins: { legend: { display: false } },
-        scales: {
-            x: { grid: { display: false }, ticks: { color: '#888', font: { size: 11 } } },
-            y: { grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#888', font: { size: 11 } } }
-        }
+function esc(s) { const d = document.createElement('div'); d.textContent = s||''; return d.innerHTML; }
+
+function showSyncStatus(type, text, time) {
+    const bar = document.getElementById('sync-status-bar');
+    if (!bar) return;
+    const icon = document.getElementById('sync-status-icon');
+    const txt = document.getElementById('sync-status-text');
+    const t = document.getElementById('sync-status-time');
+    bar.style.display = 'flex';
+    bar.className = 'sync-status-bar sync-status-' + type;
+    if (type === 'running') {
+        icon.className = 'fa fa-spinner fa-spin';
+    } else if (type === 'ok') {
+        icon.className = 'fa fa-check-circle';
+    } else {
+        icon.className = 'fa fa-exclamation-circle';
     }
-});
+    txt.textContent = text || '';
+    t.textContent = time ? ('（' + time + '）') : '';
+}
+
+function loadDiff() {
+    _fetch('/api/diff').then(r => r.json()).then(d => {
+        const el = document.getElementById('stat-pending');
+        const detail = document.getElementById('stat-pending-detail');
+        if (!d.ok) {
+            el.textContent = '?';
+            if (detail) detail.textContent = d.msg || '无法对比';
+            return;
+        }
+        el.textContent = d.pending || 0;
+        if (detail) {
+            detail.textContent = '↑' + d.toUpload + ' 待上传  ↓' + d.toDownload + ' 待下载';
+        }
+    }).catch(() => {});
+}
+
+function loadOverviewHistory() {
+    _fetch('/api/history?filter=2').then(r => r.json()).then(entries => {
+        const total = entries.length;
+        const ok = entries.filter(e => e.result === '成功').length;
+        document.getElementById('stat-success-rate').textContent = total ? (Math.round(ok*100/total) + '%') : '-';
+        const recent = entries.slice(0, 5);
+        document.getElementById('overview-history').innerHTML = recent.length ? recent.map(e => `
+            <tr>
+                <td>${esc(e.time)}</td>
+                <td style="color:#4dabf7;">${esc(e.direction)}</td>
+                <td>${esc(String(e.fileCount))}</td>
+                <td>${e.result === '成功'
+                    ? '<span class="status-ok"><i class="fa fa-check"></i></span>'
+                    : '<span class="status-fail"><i class="fa fa-times"></i></span>'}</td>
+            </tr>
+        `).join('') : '<tr><td colspan="4" style="text-align:center;color:#6b7b8d;padding:20px;">暂无记录</td></tr>';
+        if (recent.length) {
+            document.getElementById('last-sync-time').textContent = recent[0].time;
+        }
+    }).catch(() => {});
+}
+
+function loadOverview() {
+    _fetch('/api/local-info').then(r => r.json()).then(info => {
+        document.getElementById('local-name').textContent = info.name || '本地';
+        document.getElementById('local-path').textContent = info.path || '-';
+        document.getElementById('stat-files').textContent = (info.totalFiles || 0).toLocaleString();
+        document.getElementById('stat-size').textContent = info.totalSize || '-';
+    }).catch(() => {});
+
+    _fetch('/api/config').then(r => r.json()).then(cfg => {
+        document.getElementById('remote-name').textContent = cfg.remoteHost || '服务器';
+        document.getElementById('remote-path').textContent = cfg.remoteDir || '-';
+        if (cfg.jumpHost && cfg.remoteHost) {
+            _fetch('/api/test_connection', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(cfg),
+            }).then(r => r.json()).then(d => {
+                const el = document.getElementById('remote-status');
+                if (d.jumpOk && d.remoteOk) {
+                    el.innerHTML = '<span class="dot online"></span>在线';
+                } else if (d.jumpOk) {
+                    el.innerHTML = '<span class="dot offline"></span>服务器离线';
+                } else {
+                    el.innerHTML = '<span class="dot offline"></span>跳板机离线';
+                }
+            }).catch(() => {
+                document.getElementById('remote-status').innerHTML = '<span class="dot offline"></span>检测失败';
+            });
+        }
+    }).catch(() => {});
+
+    _fetch('/api/stats').then(r => r.json()).then(s => {
+        document.getElementById('stat-pending').textContent = s.pending != null ? s.pending : '-';
+    }).catch(() => {});
+
+    loadDiff();
+
+    // SSE 实时事件流：同步启动/完成/自动同步开关变化时，实时刷新状态条与差异
+    if (window.SM_TOKEN) {
+        const es = new EventSource('/events?token=' + window.SM_TOKEN);
+        es.onmessage = e => {
+            try {
+                const d = JSON.parse(e.data);
+                if (d.type === 'started') {
+                    showSyncStatus('running', '同步进行中...', '');
+                } else if (d.type === 'done') {
+                    if (d.success) {
+                        showSyncStatus('ok', '同步完成', new Date().toLocaleTimeString());
+                    } else {
+                        showSyncStatus('fail', d.message || '上次同步失败', new Date().toLocaleTimeString());
+                    }
+                    loadDiff();
+                    loadOverviewHistory();
+                } else if (d.type === 'autosync') {
+                    // 自动同步开关变化，刷新卡片
+                    if (document.getElementById('autoSyncBadge')) {
+                        const badge = document.getElementById('autoSyncBadge');
+                        badge.style.display = d.enabled ? 'inline-block' : 'none';
+                    }
+                }
+            } catch (err) { /* ignore */ }
+        };
+    }
+
+    loadOverviewHistory();
+
+    // 自动同步状态徽章
+    _fetch('/api/autosync').then(r => r.json()).then(a => {
+        const badge = document.getElementById('autoSyncBadge');
+        if (badge) badge.style.display = a.enabled ? 'inline-block' : 'none';
+    }).catch(() => {});
+
+    // 同步状态条：显示进行中 / 上次结果
+    _fetch('/api/monitor').then(r => r.json()).then(m => {
+        const statusText = m.status || '';
+        if (statusText.includes('同步中')) {
+            showSyncStatus('running', '同步进行中...', '');
+        } else if (statusText.includes('失败') || statusText.includes('取消')) {
+            showSyncStatus('fail', statusText.replace(/^失败:\s*/, '') || '上次同步失败', '');
+        } else if (statusText.includes('完成')) {
+            showSyncStatus('ok', '上次同步完成', '');
+        }
+    }).catch(() => {});
+
+    _fetch('/api/history?filter=0').then(r => r.json()).then(all => {
+        const bar = document.getElementById('sync-status-bar');
+        if (all.length && bar.style.display === 'none') {
+            const last = all[0];
+            if (last.result === '成功') {
+                showSyncStatus('ok', '上次同步成功：' + last.direction + '（' + last.fileCount + ' 个文件）', last.time);
+            } else if (last.result === '失败') {
+                showSyncStatus('fail', '上次同步失败：' + last.direction, last.time);
+            }
+        }
+    }).catch(() => {});
+
+    _fetch('/api/categories').then(r => r.json()).then(cats => {
+        const enabled = cats.filter(c => c.isEnabled);
+        const list = document.getElementById('overview-categories');
+        if (!enabled.length) {
+            list.innerHTML = '<div style="text-align:center;color:#6b7b8d;padding:20px;">暂无启用的分类</div>';
+            return;
+        }
+        list.innerHTML = enabled.slice(0, 6).map(c => `
+            <div class="sync-item">
+                <label class="toggle-switch"><input type="checkbox" checked disabled><span></span></label>
+                <div class="sync-item-info">
+                    <div class="sync-item-name">${esc(c.name)}</div>
+                    <div class="sync-item-path">${esc(c.localPath)}</div>
+                </div>
+            </div>
+        `).join('');
+    }).catch(() => {});
+}
+
+document.addEventListener('DOMContentLoaded', loadOverview);
 </script>
 {% endblock -%}

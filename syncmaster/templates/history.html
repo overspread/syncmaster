@@ -43,9 +43,11 @@
 </div>
 
 <script>
+function esc(s) { const d = document.createElement('div'); d.textContent = s!=null?String(s):''; return d.innerHTML; }
+
 async function loadHistory() {
     const filter = document.getElementById('history-filter').value;
-    const resp = await fetch('/api/history?filter=' + filter);
+    const resp = await _fetch('/api/history?filter=' + encodeURIComponent(filter));
     const entries = await resp.json();
     const tbody = document.getElementById('history-tbody');
     const empty = document.getElementById('history-empty');
@@ -57,11 +59,11 @@ async function loadHistory() {
     empty.style.display = 'none';
     tbody.innerHTML = entries.map(e => `
         <tr>
-            <td>${e.time}</td>
-            <td>${e.category}</td>
-            <td style="color:#4dabf7;">${e.direction}</td>
-            <td>${e.fileCount}</td>
-            <td>${e.duration || '-'}</td>
+            <td>${esc(e.time)}</td>
+            <td>${esc(e.category)}</td>
+            <td style="color:#4dabf7;">${esc(e.direction)}</td>
+            <td>${esc(e.fileCount)}</td>
+            <td>${esc(e.duration) || '-'}</td>
             <td>
                 ${e.result === '成功'
                     ? '<span class="status-ok"><i class="fa fa-check"></i> 成功</span>'
@@ -73,7 +75,7 @@ async function loadHistory() {
 
 async function clearHistory() {
     if (!confirm('确认清空所有历史记录？此操作不可撤销。')) return;
-    await fetch('/api/history/clear', { method: 'POST' });
+    await _fetch('/api/history/clear', { method: 'POST' });
     loadHistory();
 }
 

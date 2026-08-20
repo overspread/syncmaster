@@ -34,8 +34,10 @@
 </div>
 
 <script>
+function esc(s) { const d = document.createElement('div'); d.textContent = s!=null?String(s):''; return d.innerHTML; }
+
 async function loadAudit() {
-    const resp = await fetch('/api/audit');
+    const resp = await _fetch('/api/audit');
     const entries = await resp.json();
     const tbody = document.getElementById('audit-tbody');
     const empty = document.getElementById('audit-empty');
@@ -51,13 +53,13 @@ async function loadAudit() {
         else if (e.action.includes('失败') || e.action.includes('取消') || e.action.includes('删除')) actionClass = 'text-danger';
         return `
         <tr>
-            <td>${e.time}</td>
-            <td class="${actionClass}">${e.action}</td>
-            <td style="color:#8899aa;">${e.detail || '-'}</td>
+            <td>${esc(e.time)}</td>
+            <td class="${actionClass}">${esc(e.action)}</td>
+            <td style="color:#8899aa;">${esc(e.detail) || '-'}</td>
         </tr>`;
     }).join('');
 }
 
-loadAudit();
+document.addEventListener('DOMContentLoaded', loadAudit);
 </script>
 {% endblock -%}

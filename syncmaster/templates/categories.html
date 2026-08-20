@@ -70,6 +70,7 @@
 </div>
 
 <script>
+function esc(s) { const d = document.createElement('div'); d.textContent = s||''; return d.innerHTML; }
 const MODE_LABELS = {
     'toServer': '<span class="badge badge-blue"><i class="fa fa-arrow-up"></i> 本地->服务器</span>',
     'toLocal': '<span class="badge badge-green"><i class="fa fa-arrow-down"></i> 服务器->本地</span>',
@@ -78,7 +79,8 @@ const MODE_LABELS = {
 const CAT_ICONS = ['cube', 'puzzle-piece', 'folder-open', 'star', 'cog', 'file-text', 'database', 'clock'];
 
 async function loadCategories() {
-    const resp = await fetch('/api/categories');
+    try {
+    const resp = await _fetch('/api/categories');
     const cats = await resp.json();
     const list = document.getElementById('category-list');
     const empty = document.getElementById('category-empty');
@@ -91,42 +93,43 @@ async function loadCategories() {
                     <i class="fa fa-${CAT_ICONS[i % CAT_ICONS.length]}"></i>
                 </div>
                 <label class="toggle-switch">
-                    <input type="checkbox" ${c.isEnabled ? 'checked' : ''} onchange="toggleCategory('${c.id}', this.checked)">
+                    <input type="checkbox" ${c.isEnabled ? 'checked' : ''} onchange="toggleCategory('${esc(c.id)}', this.checked)">
                     <span></span>
                 </label>
             </div>
             <div class="cat-card-body">
-                <div class="cat-name">${c.name}</div>
+                <div class="cat-name">${esc(c.name)}</div>
                 <div class="cat-paths">
-                    <i class="fa fa-folder-o"></i> ${c.localPath}<br>
-                    <i class="fa fa-server"></i> ${c.remotePath}
+                    <i class="fa fa-folder-o"></i> ${esc(c.localPath)}<br>
+                    <i class="fa fa-server"></i> ${esc(c.remotePath)}
                 </div>
                 <div class="cat-meta">
-                    ${MODE_LABELS[c.mode] || c.mode}
-                    <span class="cat-last-sync">上次: ${c.lastSync}</span>
+                    ${MODE_LABELS[c.mode] || esc(c.mode)}
+                    <span class="cat-last-sync">上次: ${esc(c.lastSync)}</span>
                 </div>
             </div>
             <div class="cat-card-footer">
-                <button class="btn btn-sm btn-outline" onclick="syncCategory('${c.id}','${c.mode}')"><i class="fa fa-play"></i> 同步</button>
-                <button class="btn btn-sm btn-outline" onclick="editCategory('${c.id}')"><i class="fa fa-edit"></i> 编辑</button>
-                <button class="btn btn-sm btn-danger-outline" onclick="deleteCategory('${c.id}','${c.name}')"><i class="fa fa-trash"></i> 删除</button>
+                <button class="btn btn-sm btn-outline" onclick="syncCategory('${esc(c.id)}','${esc(c.mode)}')"><i class="fa fa-play"></i> 同步</button>
+                <button class="btn btn-sm btn-outline" onclick="editCategory('${esc(c.id)}')"><i class="fa fa-edit"></i> 编辑</button>
+                <button class="btn btn-sm btn-danger-outline" onclick="deleteCategory('${esc(c.id)}','${esc(c.name)}')"><i class="fa fa-trash"></i> 删除</button>
             </div>
         </div>
     `).join('');
+    } catch(e) { console.error('loadCategories', e); }
 }
 
 function syncCategory(id, mode) {
-    const dir = mode === 'toServer' ? 'push' : mode === 'toLocal' ? 'pull' : 'push';
-    fetch('/sync?target=OCI 187&dir=' + dir, { method: 'POST' });
+    const dir = mode === 'toServer' ? 'push' : mode === 'toLocal' ? 'pull' : 'bidirectional';
+    _fetch('/sync?target=' + encodeURIComponent(id) + '&dir=' + dir, { method: 'POST' });
 }
 
 async function toggleCategory(id, enabled) {
-    await fetch(`/api/category/toggle?id=${id}&enabled=${enabled ? 1 : 0}`, { method: 'POST' });
+    await _fetch(`/api/category/toggle?id=${encodeURIComponent(id)}&enabled=${enabled ? 1 : 0}`, { method: 'POST' });
 }
 
 async function deleteCategory(id, name) {
     if (!confirm(`确认删除分类「${name}」？相关数据也会被清除。`)) return;
-    await fetch(`/api/category/delete?id=${id}`, { method: 'POST' });
+    await _fetch(`/api/category/delete?id=${encodeURIComponent(id)}`, { method: 'POST' });
     loadCategories();
 }
 
@@ -144,7 +147,7 @@ function openCreateCategory() {
 }
 
 async function editCategory(id) {
-    const resp = await fetch('/api/categories');
+    const resp = await _fetch('/api/categories');
     const cats = await resp.json();
     const c = cats.find(x => x.id === id);
     if (!c) return;
@@ -175,7 +178,7 @@ async function saveCategoryForm() {
     };
     if (editingId) { cat.id = editingId; cat._edit = true; }
     if (!cat.name) { alert('请输入分类名称'); return; }
-    await fetch('/api/category/save', {
+    await _fetch('/api/category/save', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(cat),
@@ -184,6 +187,6 @@ async function saveCategoryForm() {
     loadCategories();
 }
 
-loadCategories();
+document.addEventListener('DOMContentLoaded', loadCategories);
 </script>
 {% endblock -%}

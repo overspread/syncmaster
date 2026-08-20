@@ -34,7 +34,7 @@
     <div class="sidebar-user">
         <div class="user-avatar"><i class="fa fa-user"></i></div>
         <div class="user-info">
-            <div class="user-name">Overspread</div>
+            <div class="user-name">Local</div>
             <div class="user-status"><span class="dot online"></span> 已连接</div>
         </div>
     </div>
@@ -44,10 +44,10 @@
     {% block content %}{% endblock %}
 </main>
 </div>
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js" defer></script>
 <script src="/static/app.js"></script>
 <script>
-const evt = new EventSource('/events');
+const evt = new EventSource('/events?token=' + (window.SM_TOKEN || ''));
 evt.onmessage = e => {
     const d = JSON.parse(e.data);
     if (d.type === 'log') {

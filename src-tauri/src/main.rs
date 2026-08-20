@@ -9,6 +9,7 @@ use std::time::{Duration, Instant};
 
 use anyhow::Result;
 use tauri::Manager;
+use tauri_plugin_dialog::DialogExt;
 
 // The Python sidecar is only spawned in release builds; in dev it is owned by
 // `beforeDevCommand`. Gate these so debug builds don't warn about dead code.
@@ -61,11 +62,32 @@ fn python_path_env() -> String {
     }
 }
 
+// ── 自定义命令：打开系统文件/目录选择器 ──
+// 走 core.invoke（全局模式下核心 API 必定挂载），绕开「插件全局命名空间
+// 在 v2 不一定存在」的坑。dialog 插件以回调交付结果；这里用异步 oneshot
+// 等待回调，绝不阻塞 Tauri 的运行线程，否则 macOS 原生面板可能无法回调。
+#[tauri::command]
+async fn pick_path(window: tauri::Window, directory: bool) -> Result<Option<String>, String> {
+    let (tx, rx) = tokio::sync::oneshot::channel::<Option<String>>();
+    if directory {
+        window.dialog().file().pick_folder(move |p| {
+            let _ = tx.send(p.map(|x| x.to_string()));
+        });
+    } else {
+        window.dialog().file().pick_file(move |p| {
+            let _ = tx.send(p.map(|x| x.to_string()));
+        });
+    }
+    rx.await.map_err(|e| e.to_string())
+}
+
 fn main() {
     let server_child: Arc<Mutex<Option<Child>>> = Arc::new(Mutex::new(None));
     let server_child_clone = server_child.clone();
 
     tauri::Builder::default()
+        .plugin(tauri_plugin_dialog::init())
+        .invoke_handler(tauri::generate_handler![pick_path])
         .setup(move |app| {
             let app_handle = app.handle().clone();
             let child_arc = server_child.clone();
@@ -115,7 +137,8 @@ fn main() {
                         eprintln!(
                             "[syncmaster] port {PYTHON_SERVER_PORT} ready, loading UI"
                         );
-                        let url = format!("http://127.0.0.1:{PYTHON_SERVER_PORT}");
+                        // The query string prevents WebView from reusing an older cached document.
+                        let url = format!("http://127.0.0.1:{PYTHON_SERVER_PORT}/?v=20260817");
                         if let Some(win) = app_handle_for_wait.get_webview_window("main") {
                             let _ = win.navigate(url.parse().unwrap());
                         }

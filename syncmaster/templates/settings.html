@@ -6,9 +6,6 @@
         <h1>设置</h1>
         <p>服务器连接、同步规则与偏好配置</p>
     </div>
-    <div class="header-actions">
-        <button class="btn btn-sm btn-outline"><i class="fa fa-question-circle"></i> 帮助</button>
-    </div>
 </div>
 
 <!-- 服务器与系统设置 -->
@@ -20,37 +17,64 @@
         <div class="form-grid">
             <div class="form-row">
                 <label class="form-label">跳板机 (user@host)</label>
-                <input type="text" class="form-input" value="ubuntu@54.160.252.171" placeholder="user@jump-host">
+                <input type="text" class="form-input" id="jumpHost" placeholder="user@jump-host">
             </div>
             <div class="form-row">
                 <label class="form-label">跳板机密钥路径</label>
-                <input type="text" class="form-input" value="/Users/overspread/Documents/2api.pem" placeholder="/path/to/jump_key.pem">
+                <input type="text" class="form-input pick-input" id="jumpKey" placeholder="/path/to/jump_key.pem" onclick="pickPath('jumpKey','file')">
             </div>
             <div class="form-row">
                 <label class="form-label">服务器用户</label>
-                <input type="text" class="form-input" value="opc" placeholder="remote_user">
+                <input type="text" class="form-input" id="remoteUser" placeholder="remote_user">
             </div>
             <div class="form-row">
                 <label class="form-label">服务器地址</label>
-                <input type="text" class="form-input" value="155.248.172.187" placeholder="remote.host.ip">
+                <input type="text" class="form-input" id="remoteHost" placeholder="remote.host.ip">
             </div>
             <div class="form-row">
-                <label class="form-label">服务器密钥路径 (远程)</label>
-                <input type="text" class="form-input" value="/home/ubuntu/oci_opc_key.pem" placeholder="/path/on/jump/remote_key.pem">
+                <label class="form-label">服务器密钥路径（本机）</label>
+                <input type="text" class="form-input pick-input" id="remoteKey" placeholder="/path/to/remote_key.pem" onclick="pickPath('remoteKey','file')">
             </div>
             <div class="form-row">
                 <label class="form-label">服务器目录</label>
-                <input type="text" class="form-input" value="/home/opc/.hermes" placeholder="/path/on/remote">
+                <input type="text" class="form-input" id="remoteDir" placeholder="/path/on/remote">
             </div>
             <div class="form-row">
                 <label class="form-label">本地目录</label>
-                <input type="text" class="form-input" value="/Users/overspread/.hermes" placeholder="/path/on/local">
+                <input type="text" class="form-input pick-input" id="localDir" placeholder="/path/on/local" onclick="pickPath('localDir','dir')">
             </div>
         </div>
         <div class="form-actions" style="margin-top: 20px;">
-            <button class="btn btn-outline"><i class="fa fa-plug"></i> 测试连接</button>
-            <button class="btn btn-primary"><i class="fa fa-save"></i> 保存配置</button>
+            <span id="connStatus" class="conn-status"></span>
+            <button class="btn btn-outline" id="btnTestConn" onclick="testConnection()"><i class="fa fa-plug"></i> 测试连接</button>
+            <button class="btn btn-primary" id="btnSaveCfg" onclick="saveConfig()"><i class="fa fa-save"></i> 保存配置</button>
         </div>
+    </div>
+</div>
+
+<!-- 自动持续同步 -->
+<div class="card">
+    <div class="card-header">
+        <h3>自动持续同步</h3>
+        <span style="font-size:11px;color:#4dabf7;">参考 Syncthing 持续同步理念</span>
+    </div>
+    <div class="card-body">
+        <div class="toggle-row">
+            <div class="toggle-row-info">
+                <div class="toggle-row-title">启用自动持续同步</div>
+                <div class="toggle-row-desc">本地目录文件发生变化时自动同步到服务器，无需手动点击</div>
+            </div>
+            <label class="toggle-switch"><input type="checkbox" id="autoSyncToggle" onchange="setAutoSync(this.checked)"><span></span></label>
+        </div>
+        <div class="form-row" style="margin-top:14px;">
+            <label class="form-label">同步方向</label>
+            <select class="form-select" id="autoSyncDir" onchange="setAutoSyncDirection(this.value)" style="max-width:220px;">
+                <option value="push">本地 → 远程</option>
+                <option value="pull">远程 → 本地</option>
+                <option value="bidirectional">双向同步</option>
+            </select>
+        </div>
+        <div id="autoSyncStatus" style="font-size:12px;color:#6b7b8d;margin-top:12px;line-height:1.6;"></div>
     </div>
 </div>
 
@@ -58,10 +82,7 @@
 <div class="card">
     <div class="card-header">
         <h3>.env 环境变量同步策略</h3>
-        <div class="header-inline-actions">
-            <button class="btn btn-sm btn-outline"><i class="fa fa-refresh"></i> 刷新 Key 列表</button>
-            <button class="btn btn-sm btn-primary"><i class="fa fa-exchange"></i> 同步</button>
-        </div>
+        <span style="font-size:11px;color:#6b7b8d;">（开发中）</span>
     </div>
     <div class="card-body">
         <div class="toggle-row">
@@ -69,45 +90,7 @@
                 <div class="toggle-row-title">启用 .env 智能同步</div>
                 <div class="toggle-row-desc">自动对比本地与远程 .env 差异，按配置进行合并</div>
             </div>
-            <label class="toggle-switch"><input type="checkbox"><span></span></label>
-        </div>
-        <div class="env-table">
-            <table>
-                <thead>
-                    <tr>
-                        <th>KEY</th>
-                        <th>本地值</th>
-                        <th>远程值</th>
-                        <th style="width: 80px;">同步?</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <tr>
-                        <td><code>OPENAI_API_KEY</code></td>
-                        <td>sk-****abc</td>
-                        <td>sk-****abc</td>
-                        <td><label class="toggle-switch"><input type="checkbox" checked><span></span></label></td>
-                    </tr>
-                    <tr>
-                        <td><code>DATABASE_URL</code></td>
-                        <td>postgres://localhost</td>
-                        <td>postgres://remote-db</td>
-                        <td><label class="toggle-switch"><input type="checkbox"><span></span></label></td>
-                    </tr>
-                    <tr>
-                        <td><code>REDIS_URL</code></td>
-                        <td>redis://localhost:6379</td>
-                        <td>redis://remote-cache:6379</td>
-                        <td><label class="toggle-switch"><input type="checkbox"><span></span></label></td>
-                    </tr>
-                    <tr>
-                        <td><code>LOG_LEVEL</code></td>
-                        <td>debug</td>
-                        <td>info</td>
-                        <td><label class="toggle-switch"><input type="checkbox" checked><span></span></label></td>
-                    </tr>
-                </tbody>
-            </table>
+            <label class="toggle-switch"><input type="checkbox" disabled><span></span></label>
         </div>
     </div>
 </div>
@@ -122,32 +105,10 @@
             每行一条规则，支持通配符 *。目录加 / 结尾
         </div>
         <div class="code-editor">
-            <textarea class="form-textarea" spellcheck="false">.env
-.env.local
-.env.production
-.env.server
-bot_id
-bot_id.json
-secrets/
-*.key
-*.pem
-__pycache__/
-*.pyc
-node_modules/
-.DS_Store
-.idea/
-.vscode/
-*.log
-logs/
-tmp/
-temp/
-*.swp
-*.swo
-*~
-</textarea>
+            <textarea class="form-textarea" id="syncignoreEditor" spellcheck="false" style="min-height:200px;"></textarea>
         </div>
         <div class="form-actions" style="margin-top: 16px;">
-            <button class="btn btn-primary"><i class="fa fa-save"></i> 保存规则</button>
+            <button class="btn btn-primary" id="btnSaveIgnore" onclick="saveIgnoreRules()"><i class="fa fa-save"></i> 保存规则</button>
         </div>
     </div>
 </div>
@@ -161,5 +122,21 @@ code {
     padding: 2px 6px;
     border-radius: 3px;
 }
+.conn-status {
+    display: inline-flex;
+    align-items: center;
+    font-size: 12px;
+    font-weight: 600;
+    padding: 4px 10px;
+    border-radius: 6px;
+    min-height: 28px;
+    transition: all .15s ease;
+}
+.conn-status.idle { color: #6b7b8d; background: rgba(107,123,141,.12); }
+.conn-status.testing { color: #d6a200; background: rgba(214,162,0,.12); }
+.conn-status.ok { color: #1ca672; background: rgba(28,166,114,.14); }
+.conn-status.err { color: #e5484d; background: rgba(229,72,77,.12); }
+.pick-input { cursor: pointer; }
+.pick-input:focus { cursor: text; }
 </style>
 {% endblock -%}

@@ -7,7 +7,7 @@
         <p>同步进度、速率、文件处理实时状态</p>
     </div>
     <div class="header-actions">
-        <button class="btn btn-sm btn-success" onclick="runSync('push')"><i class="fa fa-play"></i> 开始同步</button>
+        <button class="btn btn-sm btn-success" onclick="runSync('push', this)"><i class="fa fa-play"></i> 开始同步</button>
         <button class="btn btn-sm btn-danger-outline" onclick="cancelSync()"><i class="fa fa-stop"></i> 停止</button>
     </div>
 </div>
@@ -76,8 +76,12 @@
 <script>
 // 定时拉取监控数据
 async function loadMonitorData() {
-    const resp = await fetch('/api/monitor');
+    const resp = await _fetch('/api/monitor');
     const d = await resp.json();
+    updateMonitor(d);
+}
+
+function updateMonitor(d) {
     document.getElementById('mon-speed').textContent = d.speed || '0 KB/s';
     document.getElementById('mon-done').textContent = `${d.done || 0}/${Math.max(d.total || 0, d.done || 0)}`;
     document.getElementById('mon-percent').textContent = `${Math.round(d.percent || 0)}%`;
@@ -104,9 +108,30 @@ function clearLog() {
     document.getElementById('live-log').textContent = '';
 }
 
-// 初始加载
-loadMonitorData();
-// 每 2 秒刷新
-setInterval(loadMonitorData, 2000);
+document.addEventListener('DOMContentLoaded', function() {
+    loadMonitorData();
+    setInterval(loadMonitorData, 2000);
+
+    // SSE 实时事件流：收到日志时立即显示，让监控面板"活"起来
+    if (window.SM_TOKEN) {
+        const es = new EventSource('/events?token=' + window.SM_TOKEN);
+        es.onmessage = e => {
+            try {
+                const d = JSON.parse(e.data);
+                if (d.type === 'log') {
+                    const el = document.getElementById('live-log');
+                    if (el) {
+                        el.textContent += d.text + '\n';
+                        el.scrollTop = el.scrollHeight;
+                    }
+                } else if (d.type === 'started') {
+                    loadMonitorData();
+                } else if (d.type === 'done') {
+                    loadMonitorData();
+                }
+            } catch (err) { /* ignore */ }
+        };
+    }
+});
 </script>
 {% endblock -%}

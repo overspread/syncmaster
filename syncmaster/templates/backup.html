@@ -12,7 +12,6 @@
 </div>
 
 <div id="backup-list" class="backup-list">
-    <!-- 动态加载 -->
 </div>
 
 <div id="backup-empty" class="empty-state" style="display:none;">
@@ -22,8 +21,10 @@
 </div>
 
 <script>
+function esc(s) { const d = document.createElement('div'); d.textContent = s!=null?String(s):''; return d.innerHTML; }
+
 async function loadBackups() {
-    const resp = await fetch('/api/backups');
+    const resp = await _fetch('/api/backups');
     const backups = await resp.json();
     const list = document.getElementById('backup-list');
     const empty = document.getElementById('backup-empty');
@@ -36,17 +37,17 @@ async function loadBackups() {
     list.innerHTML = backups.map(b => `
         <div class="backup-item">
             <div class="backup-info">
-                <div class="backup-name"><i class="fa fa-folder"></i> ${b.name}</div>
+                <div class="backup-name"><i class="fa fa-folder"></i> ${esc(b.name)}</div>
                 <div class="backup-meta">
-                    <span><i class="fa fa-clock-o"></i> ${b.time}</span>
-                    <span><i class="fa fa-database"></i> ${b.size}</span>
+                    <span><i class="fa fa-clock-o"></i> ${esc(b.time)}</span>
+                    <span><i class="fa fa-database"></i> ${esc(b.size)}</span>
                 </div>
             </div>
             <div class="backup-actions">
-                <button class="btn btn-sm btn-warning-outline" onclick="rollbackBackup('${b.path}','${b.name}')">
+                <button class="btn btn-sm btn-warning-outline" onclick="rollbackBackup('${esc(b.path)}','${esc(b.name)}')">
                     <i class="fa fa-undo"></i> 回滚
                 </button>
-                <button class="btn btn-sm btn-danger-outline" onclick="deleteBackup('${b.path}','${b.name}')">
+                <button class="btn btn-sm btn-danger-outline" onclick="deleteBackup('${esc(b.path)}','${esc(b.name)}')">
                     <i class="fa fa-trash"></i> 删除
                 </button>
             </div>
@@ -56,11 +57,11 @@ async function loadBackups() {
 
 async function rollbackBackup(path, name) {
     if (!confirm(`确认回滚到「${name}」？\n\n将用备份数据覆盖本地目录，此操作不可撤销。`)) return;
-    const resp = await fetch(`/api/backup/rollback?path=${encodeURIComponent(path)}`, { method: 'POST' });
+    const resp = await _fetch(`/api/backup/rollback?path=${encodeURIComponent(path)}`, { method: 'POST' });
     const data = await resp.json();
     if (data.ok) {
         alert('回滚成功');
-        loadBackups();
+document.addEventListener('DOMContentLoaded', loadBackups);
     } else {
         alert('回滚失败: ' + data.message);
     }
@@ -68,7 +69,7 @@ async function rollbackBackup(path, name) {
 
 async function deleteBackup(path, name) {
     if (!confirm(`确认删除备份「${name}」？此操作不可撤销。`)) return;
-    await fetch(`/api/backup/delete?path=${encodeURIComponent(path)}`, { method: 'POST' });
+    await _fetch(`/api/backup/delete?path=${encodeURIComponent(path)}`, { method: 'POST' });
     loadBackups();
 }
 
