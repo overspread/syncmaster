@@ -1,96 +1,274 @@
 {%- extends "base.html" -%}
-{%- block title -%}监控面板 | SyncMaster{% endblock -%}
+{%- block title -%}实时监控面板 | SyncMaster 智能同步中心{% endblock -%}
 {%- block content -%}
-<div class="page-header">
-    <div>
-        <h1>实时监控面板</h1>
-        <p>同步进度、速率、文件处理实时状态</p>
-    </div>
-    <div class="header-actions">
-        <a href="/categories" class="btn btn-sm btn-primary" style="text-decoration:none;"><i class="fa fa-tasks"></i> 管理同步任务</a>
-        <button class="btn btn-sm btn-danger-outline" id="btn-stop" x-show="$store.sync.running" @click="$store.sync.cancel($el)" x-cloak><i class="fa fa-stop"></i> 停止</button>
-    </div>
-</div>
+<div class="monitor-page">
 
-<!-- 监控指标 -->
-<div class="monitor-grid">
-    <div class="stat-card">
-        <i class="fa fa-tachometer stat-icon"></i>
-        <div class="stat-content">
-            <div class="stat-value" x-text="$store.sync.stats.speed || '0 KB/s'"></div>
-            <div class="stat-label">实时速率</div>
+    <!-- ════════ 顶部控制栏 ════════ -->
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
+        <div>
+            <div style="font-size: 13px; color: var(--text-secondary); margin-bottom: 2px;">实时监控</div>
+            <div style="font-size: 12px; color: var(--text-muted);">传输速率、文件传输流水与实时任务进度追踪</div>
+        </div>
+        <div style="display: flex; align-items: center; gap: 10px;">
+            <a href="/categories" class="btn-pill-primary" style="text-decoration:none;">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <rect width="7" height="7" x="3" y="3" rx="1"/><rect width="7" height="7" x="14" y="3" rx="1"/>
+                    <rect width="7" height="7" x="14" y="14" rx="1"/><rect width="7" height="7" x="3" y="14" rx="1"/>
+                </svg>
+                <span>管理同步分类</span>
+            </a>
+            <button class="btn-pill-outline btn-danger-ghost" id="btn-stop" x-show="$store.sync.running" @click="$store.sync.cancel($el)" x-cloak>
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <rect width="18" height="18" x="3" y="3" rx="2"/>
+                </svg>
+                <span>停止任务</span>
+            </button>
         </div>
     </div>
-    <div class="stat-card">
-        <i class="fa fa-file-text stat-icon"></i>
-        <div class="stat-content">
-            <div class="stat-value"><span x-text="$store.sync.stats.done || 0"></span>/<span x-text="Math.max($store.sync.stats.total || 0, $store.sync.stats.done || 0)"></span></div>
-            <div class="stat-label">已处理文件</div>
-        </div>
-    </div>
-    <div class="stat-card">
-        <i class="fa fa-check-circle stat-icon"></i>
-        <div class="stat-content">
-            <div class="stat-value" x-text="Math.round($store.sync.stats.percent || 0) + '%'"></div>
-            <div class="stat-label">完成进度</div>
-        </div>
-    </div>
-    <div class="stat-card">
-        <i class="fa fa-clock-o stat-icon"></i>
-        <div class="stat-content">
-            <div class="stat-value" x-text="$store.sync.stats.eta || '--:--'"></div>
-            <div class="stat-label">预计剩余</div>
-        </div>
-    </div>
-</div>
 
-<!-- 进度条 -->
-<div class="card">
-    <div class="card-header">
-        <h3>同步进度</h3>
-        <span class="monitor-status" x-text="$store.sync.stats.status || '就绪'"></span>
-    </div>
-    <div class="card-body">
-        <div class="progress-bar-wrap">
-            <div class="progress-bar-fill" :style="`width:${$store.sync.stats.percent || 0}%`"></div>
+    <!-- ════════ 监控指标卡片网格 ════════ -->
+    <div class="stats-grid" style="margin-bottom: 20px;">
+        <div class="stat-card">
+            <div class="stat-icon-wrap" style="background: rgba(59, 130, 246, 0.12); color: #60A5FA;">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
+                </svg>
+            </div>
+            <div>
+                <div class="stat-value" x-text="$store.sync.stats.speed || '0 KB/s'"></div>
+                <div class="stat-label">传输速率</div>
+            </div>
         </div>
-        <div class="progress-current-file" x-text="$store.sync.stats.currentFile || '等待开始...'"></div>
-        <div class="progress-counters">
-            <span class="counter-up"><i class="fa fa-arrow-up"></i> <span x-text="$store.sync.stats.uploaded || 0"></span></span>
-            <span class="counter-down"><i class="fa fa-arrow-down"></i> <span x-text="$store.sync.stats.downloaded || 0"></span></span>
-        </div>
-    </div>
-</div>
 
-<!-- 实时日志 -->
-<div class="card">
-    <div class="card-header">
-        <h3>同步执行日志</h3>
-        <button class="btn btn-sm btn-outline" @click="$store.sync.logLines = []; window.sessionStorage.removeItem('sm_log')"><i class="fa fa-eraser"></i> 清空</button>
+        <div class="stat-card">
+            <div class="stat-icon-wrap" style="background: rgba(139, 92, 246, 0.12); color: #A78BFA;">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/>
+                    <polyline points="14 2 14 8 20 8"/>
+                </svg>
+            </div>
+            <div>
+                <div class="stat-value">
+                    <span x-text="$store.sync.stats.done || 0"></span><span style="color:var(--text-muted);font-size:16px;">/</span><span x-text="Math.max($store.sync.stats.total || 0, $store.sync.stats.done || 0)"></span>
+                </div>
+                <div class="stat-label">已处理文件</div>
+            </div>
+        </div>
+
+        <div class="stat-card">
+            <div class="stat-icon-wrap" style="background: rgba(16, 185, 129, 0.12); color: #34D399;">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/>
+                </svg>
+            </div>
+            <div>
+                <div class="stat-value" x-text="Math.round($store.sync.stats.percent || 0) + '%'"></div>
+                <div class="stat-label">总体进度</div>
+            </div>
+        </div>
+
+        <div class="stat-card">
+            <div class="stat-icon-wrap" style="background: rgba(245, 158, 11, 0.12); color: #FBBF24;">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
+                </svg>
+            </div>
+            <div>
+                <div class="stat-value" x-text="$store.sync.stats.eta || '--:--'"></div>
+                <div class="stat-label">预计剩余时间</div>
+            </div>
+        </div>
     </div>
-    <div class="card-body" style="padding:0;">
-        <div id="live-log" class="live-log-area" x-effect="$el.textContent = $store.sync.logLines.join('\n'); $el.scrollTop = $el.scrollHeight"></div>
+
+    <!-- ════════ 进度条卡片 ════════ -->
+    <div class="settings-card" style="margin-bottom: 20px;">
+        <div class="settings-card-header">
+            <div style="display: flex; align-items: center; gap: 10px;">
+                <h3 class="settings-card-title">同步传输执行进度</h3>
+                <span class="monitor-badge" :class="monitorStatusClass" x-text="$store.sync.stats.status || '就绪'"></span>
+            </div>
+            <div class="monitor-counters">
+                <span class="counter-pill counter-up">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                        <line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/>
+                    </svg>
+                    <span>上传: <strong x-text="$store.sync.stats.uploaded || 0"></strong></span>
+                </span>
+                <span class="counter-pill counter-down">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                        <line x1="12" y1="5" x2="12" y2="19"/><polyline points="19 12 12 19 5 12"/>
+                    </svg>
+                    <span>下载: <strong x-text="$store.sync.stats.downloaded || 0"></strong></span>
+                </span>
+            </div>
+        </div>
+
+        <div class="settings-card-body">
+            <div class="progress-bar-wrap">
+                <div class="progress-bar-fill" :style="`width:${$store.sync.stats.percent || 0}%`"></div>
+            </div>
+            <div class="progress-current-file-wrap">
+                <span class="pulse-dot" x-show="$store.sync.running"></span>
+                <span class="progress-current-file" x-text="$store.sync.stats.currentFile || '当前无进行中的同步任务'"></span>
+            </div>
+        </div>
     </div>
+
+    <!-- ════════ 实时控制台日志 ════════ -->
+    <div class="settings-card">
+        <div class="settings-card-header">
+            <div style="display: flex; align-items: center; gap: 10px;">
+                <div class="settings-card-icon" style="background: rgba(255, 255, 255, 0.05); color: var(--text-secondary);">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/>
+                    </svg>
+                </div>
+                <div>
+                    <h3 class="settings-card-title">传输流水与控制台日志</h3>
+                    <p class="settings-card-desc">实时捕获 rsync / ssh 底层进程标准输出与状态回报</p>
+                </div>
+            </div>
+            <button class="btn-pill-outline" @click="$store.sync.logLines = []; window.sessionStorage.removeItem('sm_log')" title="清空当前日志">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+                </svg>
+                <span>清空日志</span>
+            </button>
+        </div>
+
+        <div style="padding: 0; background: #070A11;">
+            <div id="live-log" class="live-log-area" x-effect="$el.textContent = $store.sync.logLines.join('\n'); $el.scrollTop = $el.scrollHeight"></div>
+        </div>
+    </div>
+
 </div>
 
 <style>
 [x-cloak] { display: none !important; }
-.monitor-status.status-success { color: var(--success); }
-.monitor-status.status-fail { color: var(--danger); }
-.monitor-status.status-running { color: var(--info); }
+
+.monitor-page {
+    max-width: 1000px;
+}
+
+.monitor-badge {
+    font-size: 11px;
+    font-weight: 600;
+    padding: 3px 10px;
+    border-radius: var(--radius-full);
+    border: 1px solid var(--border-subtle);
+    background: rgba(255, 255, 255, 0.04);
+    color: var(--text-secondary);
+}
+.monitor-badge.badge-success {
+    background: rgba(16, 185, 129, 0.12);
+    border-color: rgba(16, 185, 129, 0.25);
+    color: #34D399;
+}
+.monitor-badge.badge-fail {
+    background: rgba(239, 68, 68, 0.12);
+    border-color: rgba(239, 68, 68, 0.25);
+    color: #F87171;
+}
+.monitor-badge.badge-running {
+    background: rgba(59, 130, 246, 0.12);
+    border-color: rgba(59, 130, 246, 0.25);
+    color: #60A5FA;
+}
+
+.monitor-counters {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+.counter-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 10px;
+    border-radius: var(--radius-full);
+    font-size: 12px;
+    font-weight: 500;
+}
+.counter-up {
+    background: rgba(59, 130, 246, 0.1);
+    border: 1px solid rgba(59, 130, 246, 0.2);
+    color: #60A5FA;
+}
+.counter-down {
+    background: rgba(16, 185, 129, 0.1);
+    border: 1px solid rgba(16, 185, 129, 0.2);
+    color: #34D399;
+}
+
+.progress-bar-wrap {
+    background: rgba(255, 255, 255, 0.06);
+    border-radius: var(--radius-full);
+    height: 8px;
+    overflow: hidden;
+    position: relative;
+}
+.progress-bar-fill {
+    height: 100%;
+    background: linear-gradient(90deg, #3B82F6 0%, #8B5CF6 50%, #10B981 100%);
+    border-radius: var(--radius-full);
+    transition: width 0.3s ease;
+    box-shadow: 0 0 12px rgba(59, 130, 246, 0.5);
+}
+
+.progress-current-file-wrap {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 12px;
+}
+.progress-current-file {
+    font-family: 'SFMono-Regular', Consolas, monospace;
+    font-size: 12px;
+    color: var(--text-secondary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.pulse-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: #3B82F6;
+    animation: pulse 1.5s infinite;
+    flex-shrink: 0;
+}
+@keyframes pulse {
+    0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.7); }
+    70% { transform: scale(1); box-shadow: 0 0 0 6px rgba(59, 130, 246, 0); }
+    100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(59, 130, 246, 0); }
+}
+
+.live-log-area {
+    min-height: 280px;
+    max-height: 480px;
+    overflow-y: auto;
+    padding: 16px 20px;
+    font-family: 'JetBrains Mono', 'SFMono-Regular', Consolas, monospace;
+    font-size: 12px;
+    line-height: 1.6;
+    color: #94A3B8;
+    white-space: pre-wrap;
+    word-break: break-all;
+}
 </style>
+
 <script>
-// 监控页状态颜色由 Alpine 计算
-document.addEventListener('alpine:initialized', () => {
-    Alpine.effect(() => {
-        const s = Alpine.store('sync').stats.status || '';
-        const el = document.querySelector('.monitor-status');
-        if (!el) return;
-        el.classList.remove('status-success', 'status-fail', 'status-running');
-        if (s.includes('完成') || s.includes('成功')) el.classList.add('status-success');
-        else if (s.includes('失败') || s.includes('取消') || s.includes('停止')) el.classList.add('status-fail');
-        else if (s.includes('中')) el.classList.add('status-running');
-    });
+document.addEventListener('alpine:init', () => {
+    // 监听状态样式切换
+    Alpine.data('monitorHelper', () => ({
+        get monitorStatusClass() {
+            const s = Alpine.store('sync').stats.status || '';
+            if (s.includes('完成') || s.includes('成功')) return 'badge-success';
+            if (s.includes('失败') || s.includes('取消') || s.includes('停止')) return 'badge-fail';
+            if (s.includes('中')) return 'badge-running';
+            return '';
+        }
+    }));
 });
 </script>
 {% endblock -%}

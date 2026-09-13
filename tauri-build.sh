@@ -8,13 +8,11 @@
 set -uo pipefail
 cd "$(dirname "$0")"
 
-command -v tauri >/dev/null 2>&1 || cargo install tauri-cli --version "^2"
-
 cd src-tauri
 
-# `cargo tauri build` 在 macOS 会尝试用 create-dmg (依赖 Finder/AppleScript)
-# 生成 .dmg，在无 GUI / 沙箱环境下必然失败。这里不让它中断后续兜底流程。
-cargo tauri build "$@" || echo "⚠️  tauri build 在 DMG 阶段报错（create-dmg 依赖），继续用手动 hdiutil 兜底。"
+# `tauri build` 在 macOS 会尝试用 create-dmg (依赖 Finder/AppleScript)
+# 生成 .dmg，在无 GUI / 沙箱环境下可能失败。这里不让它中断后续兜底流程。
+npx -y @tauri-apps/cli@2 build "$@" || echo "⚠️  tauri build 在 DMG 阶段报错，继续用手动 hdiutil 兜底。"
 
 APP="target/release/bundle/macos/SyncMaster.app"
 DMG_DIR="target/release/bundle/dmg"

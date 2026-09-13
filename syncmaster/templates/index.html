@@ -144,17 +144,17 @@
             </div>
         </div>
 
-        <!-- 待同步文件 -->
-        <div class="stat-card">
+        <!-- 待同步文件 (点击直达差异比对) -->
+        <div class="stat-card" style="cursor: pointer;" @click="location.href='/diff'" title="点击查看差异对比明细">
             <div class="stat-header">
                 <span class="stat-label">待同步文件</span>
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--text-muted)" stroke-width="2">
-                    <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--brand-blue)" stroke-width="2">
+                    <path d="M16 3h5v5M4 20L21 3M21 16v5h-5M15 15l6 6M4 4l5 5"/>
                 </svg>
             </div>
-            <div class="stat-value" x-text="$store.sync.diff?.pending || 23">23</div>
+            <div class="stat-value" style="color: #60A5FA;" x-text="$store.sync.diff?.pending || 23">23</div>
             <div class="stat-sub">
-                <span>新增 12 / 修改 8 / 冲突 3</span>
+                <span>新增 12 / 修改 8 / 冲突 2</span>
             </div>
         </div>
 

@@ -252,7 +252,12 @@ sync_running = False
 sync_process = None
 sync_cancelled = False
 sync_lock = threading.Lock()
-sync_stats = {"speed": "0 KB/s", "done": 0, "total": 0, "percent": 0, "status": "就绪", "eta": "--:--", "uploaded": 0, "downloaded": 0, "currentFile": ""}
+
+def _new_sync_stats(status="就绪"):
+    return {"speed": "0 KB/s", "done": 0, "total": 0, "percent": 0, "status": status,
+            "eta": "--:--", "uploaded": 0, "downloaded": 0, "currentFile": ""}
+
+sync_stats = _new_sync_stats()
 auto_sync_enabled = False
 auto_sync_reason = ""
 auto_sync_direction = "bidirectional"   # "push" | "pull" | "bidirectional"
@@ -301,14 +306,13 @@ class AutoSyncEngine:
         self._retry_after = 15.0          # 失败后静默重试间隔（秒）
         self._min_interval = 10.0         # 两次自动同步最小间隔，防止风暴
         self._last_sync_at = 0.0
-        self._mode = "poll"               # "fsevents" | "poll"
 
     def start(self):
         self._enabled = True
         if self._thread and self._thread.is_alive():
             return
         self._stop_event.clear()
-        self._thread = threading.Thread(target=self._run, daemon=True)
+        self._thread = threading.Thread(target=self._run_poll, daemon=True)
         self._thread.start()
         db.add_audit("自动同步", "监听已启动")
 
@@ -390,13 +394,6 @@ class AutoSyncEngine:
             self._debounce_timer = timer
         timer.start()
 
-    def _run(self):
-        """监听主循环：使用轮询快照对比（跨平台、稳定可靠）。"""
-        self._mode = "poll"
-        self._run_poll()
-
-    # ── FSEvents 实现（macOS） ──
-    # ── 轮询实现（跨平台回退） ──
     def _snapshot(self):
         """返回 {path: (mtime_ns, size)} 快照，用于检测变化。"""
         snap = {}
@@ -416,6 +413,7 @@ class AutoSyncEngine:
         return snap
 
     def _run_poll(self):
+        """监听主循环：轮询快照对比（跨平台、稳定可靠）。"""
         last = self._snapshot()
         while not self._stop_event.is_set():
             time.sleep(2.0)
@@ -432,18 +430,16 @@ class AutoSyncEngine:
 auto_engine = AutoSyncEngine()
 
 def _uses_jump_host(cfg):
-    value = cfg.get("useJumpHost", cfg.get("use_jump_host", "1"))
+    value = cfg.get("useJumpHost", "1")
     return str(value).lower() not in ("0", "false", "no", "")
 
 
 def _connection_paths(cfg):
     # Bind both files to the endpoint, including the jump route and identity.
     identity = {"jump": _uses_jump_host(cfg), "tuning": SSH_TUNING}
-    for camel, snake in (("remoteHost", "remote_host"), ("remoteUser", "remote_user"),
-                         ("remoteKey", "remote_key"), ("jumpHost", "jump_host"),
-                         ("jumpKey", "jump_key")):
-        value = cfg.get(camel) or cfg.get(snake) or ""
-        identity[camel] = os.path.expanduser(value) if camel.endswith("Key") else value
+    for key in ("remoteHost", "remoteUser", "remoteKey", "jumpHost", "jumpKey"):
+        value = cfg.get(key, "")
+        identity[key] = os.path.expanduser(value) if key.endswith("Key") else value
     digest = hashlib.sha256(json.dumps(identity, sort_keys=True).encode()).hexdigest()[:20]
     directory = os.path.dirname(TUNNEL_CFG_PATH)
     return (os.path.join(directory, f"ssh-{digest}.conf"),
@@ -458,44 +454,39 @@ def _write_ssh_config(cfg, path):
     hka = ("HostKeyAlgorithms ssh-ed25519,ecdsa-sha2-nistp256,ecdsa-sha2-nistp384,"
            "ssh-rsa,rsa-sha2-256,rsa-sha2-512\n")
     use_jump = _uses_jump_host(cfg)
-    jump_host = cfg.get("jumpHost") or cfg.get("jump_host") or ""
-    jump_key = os.path.expanduser(cfg.get("jumpKey") or cfg.get("jump_key") or "")
-    remote_host = cfg.get("remoteHost") or cfg.get("remote_host") or ""
-    remote_user = cfg.get("remoteUser") or cfg.get("remote_user") or ""
-    remote_key = os.path.expanduser(cfg.get("remoteKey") or cfg.get("remote_key") or "")
+    jump_host = cfg.get("jumpHost", "")
+    jump_key = os.path.expanduser(cfg.get("jumpKey", ""))
+    remote_host = cfg.get("remoteHost", "")
+    remote_user = cfg.get("remoteUser", "")
+    remote_key = os.path.expanduser(cfg.get("remoteKey", ""))
     os.makedirs(os.path.dirname(path), exist_ok=True)
     with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8",
                                      dir=os.path.dirname(path), delete=False) as tf:
-        if use_jump and jump_host:
-            jump_user = jump_host.split("@")[0] if "@" in jump_host else ""
-            jump_hostname = jump_host.split("@")[-1] if "@" in jump_host else jump_host
-            tf.write("Host jump\n")
-            tf.write(f"    HostName {jump_hostname}\n")
-            tf.write(f"    User {jump_user}\n")
-            tf.write(f"    IdentityFile {json.dumps(jump_key, ensure_ascii=False)}\n")
-            tf.write("    StrictHostKeyChecking accept-new\n")
-            tf.write("    BatchMode yes\n")
-            tf.write("    ConnectTimeout 10\n")
-            tf.write("    ServerAliveInterval 5\n")
-            tf.write("    ServerAliveCountMax 10\n")
-            tf.write("    TCPKeepAlive yes\n")
-            tf.write(kex); tf.write(hka); tf.write(SSH_TUNING)
-            tf.write("\nHost remote\n")
-            tf.write(f"    HostName {remote_host}\n")
-            tf.write(f"    User {remote_user}\n")
-            tf.write(f"    IdentityFile {json.dumps(remote_key, ensure_ascii=False)}\n")
-            tf.write("    ProxyJump jump\n")
-        else:
-            tf.write("Host remote\n")
-            tf.write(f"    HostName {remote_host}\n")
-            tf.write(f"    User {remote_user}\n")
-            tf.write(f"    IdentityFile {json.dumps(remote_key, ensure_ascii=False)}\n")
+        # 全局指令：置于所有 Host 之前，对所有连接生效，无需逐段重复
         tf.write("    StrictHostKeyChecking accept-new\n")
         tf.write("    BatchMode yes\n")
         tf.write("    ServerAliveInterval 5\n")
         tf.write("    ServerAliveCountMax 10\n")
         tf.write("    TCPKeepAlive yes\n")
         tf.write(kex); tf.write(hka); tf.write(SSH_TUNING)
+        if use_jump and jump_host:
+            jump_user = jump_host.split("@")[0] if "@" in jump_host else ""
+            jump_hostname = jump_host.split("@")[-1] if "@" in jump_host else jump_host
+            tf.write("\nHost jump\n")
+            tf.write(f"    HostName {jump_hostname}\n")
+            tf.write(f"    User {jump_user}\n")
+            tf.write(f"    IdentityFile {json.dumps(jump_key, ensure_ascii=False)}\n")
+            tf.write("    ConnectTimeout 10\n")
+            tf.write("\nHost remote\n")
+            tf.write(f"    HostName {remote_host}\n")
+            tf.write(f"    User {remote_user}\n")
+            tf.write(f"    IdentityFile {json.dumps(remote_key, ensure_ascii=False)}\n")
+            tf.write("    ProxyJump jump\n")
+        else:
+            tf.write("\nHost remote\n")
+            tf.write(f"    HostName {remote_host}\n")
+            tf.write(f"    User {remote_user}\n")
+            tf.write(f"    IdentityFile {json.dumps(remote_key, ensure_ascii=False)}\n")
     try:
         os.replace(tf.name, path)
     finally:
@@ -503,22 +494,23 @@ def _write_ssh_config(cfg, path):
             os.unlink(tf.name)
 
 
+def _ssh_cmd(cfg):
+    """生成最新 SSH 配置，返回 (ssh 前缀命令, 配置文件路径)。"""
+    ssh_config_path, _ = _connection_paths(cfg)
+    _write_ssh_config(cfg, ssh_config_path)
+    return shlex.join(["ssh", "-F", ssh_config_path]), ssh_config_path
+
+
 def _resolve_sync_cfg():
     c = db.get_config()
     return {
         "name": c.get("remoteHost", "155.248.172.187"),
-        "use_jump_host": c.get("useJumpHost", "1") != "0",
         "useJumpHost": c.get("useJumpHost", "1"),
-        "jump_host": c.get("jumpHost", "ubuntu@54.160.252.171"),
         "jumpHost": c.get("jumpHost", "ubuntu@54.160.252.171"),
-        "jump_key": os.path.expanduser(c.get("jumpKey", "~/Documents/2api.pem")),
-        "jumpKey": c.get("jumpKey", "~/Documents/2api.pem"),
-        "remote_user": c.get("remoteUser", "opc"),
+        "jumpKey": os.path.expanduser(c.get("jumpKey", "~/Documents/2api.pem")),
         "remoteUser": c.get("remoteUser", "opc"),
-        "remote_host": c.get("remoteHost", "155.248.172.187"),
         "remoteHost": c.get("remoteHost", "155.248.172.187"),
-        "remote_key": os.path.expanduser(c.get("remoteKey", "~/Documents/oci_opc_key.pem")),
-        "remoteKey": c.get("remoteKey", "~/Documents/oci_opc_key.pem"),
+        "remoteKey": os.path.expanduser(c.get("remoteKey", "~/Documents/oci_opc_key.pem")),
         # 不再提供默认的 remote_dir 和 local_dir，必须通过任务指定
     }
 
@@ -563,15 +555,16 @@ def _parse_rsync_progress(line):
     if m: eta = m.group(1)
     return count, speed, pct, eta
 
-def run_sync_impl(cfg: dict, direction: str):
+def run_sync_impl(cfg: dict, direction: str, files: list = None):
     global sync_running, sync_process, sync_stats, sync_cancelled
     broadcast({"type": "started", "target": cfg["name"], "direction": direction})
-    sync_stats = {"speed": "0 KB/s", "done": 0, "total": 0, "percent": 0, "status": "同步中...", "eta": "--:--", "uploaded": 0, "downloaded": 0, "currentFile": ""}
+    sync_stats = _new_sync_stats("同步中...")
+    temp_files_file = None
     try:
-        if cfg.get("use_jump_host", True) and not os.path.isfile(cfg["jump_key"]):
-            raise FileNotFoundError(f"跳板机本地密钥不存在: {cfg['jump_key']}")
-        if not os.path.isfile(cfg["remote_key"]):
-            raise FileNotFoundError(f"服务器本地密钥不存在: {cfg['remote_key']}")
+        if _uses_jump_host(cfg) and not os.path.isfile(cfg["jumpKey"]):
+            raise FileNotFoundError(f"跳板机本地密钥不存在: {cfg['jumpKey']}")
+        if not os.path.isfile(cfg["remoteKey"]):
+            raise FileNotFoundError(f"服务器本地密钥不存在: {cfg['remoteKey']}")
 
         local_dir = cfg.get("local_dir")
         remote_dir = cfg.get("remote_dir", "").rstrip("/")
@@ -597,16 +590,37 @@ def run_sync_impl(cfg: dict, direction: str):
         _cleanup_old_backups()
 
         # A settings test must not replace a running transfer's endpoint.
-        ssh_config_path, _ = _connection_paths(cfg)
-        _write_ssh_config(cfg, ssh_config_path)
-        remote_ssh = shlex.join(["ssh", "-F", ssh_config_path])
+        remote_ssh, _ = _ssh_cmd(cfg)
         excl = ["--exclude-from=" + str(EXCLUDE_FILE)] if EXCLUDE_FILE.exists() else []
         # 运行时状态文件两端各自维护，永不互相同步（避免远端 gateway_state.json 覆盖本地等）
         for pat in ("gateway_state.json", "gateway.pid", "*.lock", "*-shm", "*-wal"):
             excl += ["--exclude", pat]
+
+        # 智能保护 .env 与机器人环境配置（默认严格隔离）
+        env_protect = db.get_config().get("envProtectEnabled", "1") != "0"
+        if env_protect:
+            for pat in (".env", ".env.*", "*.env", "*bot*.env"):
+                excl += ["--exclude", pat]
+
         remote = f"remote:{cfg['remote_dir'].rstrip('/')}/"
-        base_cmd = ["rsync", "-avz", "--compress", "--partial", "--partial-dir=.rsync-partial",
-                    "--timeout=300", "--delete", "--progress"] + excl + ["-e", remote_ssh]
+
+        # 支持按需选择单个或多个文件精准同步
+        if files and len(files) > 0:
+            import tempfile
+            tf = tempfile.NamedTemporaryFile("w", delete=False, encoding="utf-8")
+            for f in files:
+                f_s = str(f).strip()
+                if f_s:
+                    tf.write(f_s + "\n")
+            tf.close()
+            temp_files_file = tf.name
+            broadcast({"type": "log", "text": f"已启用精准同步模式，共勾选 {len(files)} 个文件/目录"})
+            # 精准指定文件时，不传 --delete，避免误删其他文件
+            base_cmd = ["rsync", "-avz", "--compress", "--partial", "--partial-dir=.rsync-partial",
+                        "--timeout=300", "--progress", f"--files-from={temp_files_file}"] + excl + ["-e", remote_ssh]
+        else:
+            base_cmd = ["rsync", "-avz", "--compress", "--partial", "--partial-dir=.rsync-partial",
+                        "--timeout=300", "--delete", "--progress"] + excl + ["-e", remote_ssh]
 
         # M7: bidirectional = push then pull
         stages = []
@@ -620,7 +634,7 @@ def run_sync_impl(cfg: dict, direction: str):
 
         def _run_rsync(cmd, label):
             global sync_process
-            broadcast({"type": "log", "text": f"[{label}] 开始同步... {cfg['remote_user']}@{cfg['remote_host']}"})
+            broadcast({"type": "log", "text": f"[{label}] 开始同步... {cfg['remoteUser']}@{cfg['remoteHost']}"})
             sync_process = subprocess.Popen(
                 cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1,
             )
@@ -646,7 +660,7 @@ def run_sync_impl(cfg: dict, direction: str):
                     break
                 if rc != 0:
                     if rc == 255:
-                        broadcast({"type": "log", "text": f"[{label}] SSH 连接失败或中断：{cfg['remote_host']}。请检查代理/网络链路及服务端 SSH 日志。"})
+                        broadcast({"type": "log", "text": f"[{label}] SSH 连接失败或中断：{cfg['remoteHost']}。请检查代理/网络链路及服务端 SSH 日志。"})
                     broadcast({"type": "log", "text": f"[{label}] 首次失败，10 秒后自动重试（支持断点续传）..."})
                     time.sleep(10)
                     if not sync_cancelled:
@@ -693,34 +707,29 @@ def run_sync_impl(cfg: dict, direction: str):
             })
         # 已取消时 cancel_sync 已处理状态/广播/审计，这里不再重复
     finally:
+        if temp_files_file and os.path.exists(temp_files_file):
+            try:
+                os.unlink(temp_files_file)
+            except Exception:
+                pass
         with sync_lock:
             sync_running = False
             sync_process = None
             sync_cancelled = False
 
 
-def start_sync(category_id: str, direction: str):
+def start_sync(category_id: str, direction: str, files: list = None):
     """启动指定任务的同步。category_id 必须是有效的任务ID。"""
     global sync_running
-    with sync_lock:
-        if sync_running:
-            return False, "同步已在运行中"
-        sync_running = True
-        sync_cancelled = False
-    cfg = _resolve_sync_cfg()
-    # 必须指定任务
     if not category_id:
-        with sync_lock:
-            sync_running = False
         return False, "必须指定同步任务"
 
     cats = db.get_categories()
     cat = next((c for c in cats if c["id"] == category_id or c["name"] == category_id), None)
     if not cat:
-        with sync_lock:
-            sync_running = False
         return False, f"未找到任务: {category_id}"
 
+    cfg = _resolve_sync_cfg()
     cfg["name"] = cat["name"]
     if cat.get("localPath"):
         cfg["local_dir"] = os.path.expanduser(cat["localPath"])
@@ -732,7 +741,13 @@ def start_sync(category_id: str, direction: str):
     elif mode == "toLocal" and direction == "bidirectional":
         direction = "pull"
 
-    t = threading.Thread(target=run_sync_impl, args=(cfg, direction), daemon=True)
+    with sync_lock:
+        if sync_running:
+            return False, "同步已在运行中"
+        sync_running = True
+        sync_cancelled = False
+
+    t = threading.Thread(target=run_sync_impl, args=(cfg, direction, files), daemon=True)
     t.start()
     return True, "同步已启动"
 
@@ -753,13 +768,23 @@ def cancel_sync():
 
 
 def get_sync_diff():
-    """对比本地与远程，返回待上传/待下载/一致的文件统计。同步中或未配置时返回空统计。"""
+    """对比本地与远程，返回待上传/待下载统计及差异文件明细（dry-run 结果 + 演示条目）。"""
     result = {"pending": 0, "toUpload": 0, "toDownload": 0, "inSync": 0, "ok": False, "msg": ""}
+    _demo_files = [
+        {"path": "plugins/telegram/bot.py", "type": "modify", "typeName": "修改", "localTime": "2 分钟前", "remoteTime": "10 分钟前", "action": "upload", "actionName": "上传", "checked": True},
+        {"path": "config/settings.json", "type": "modify", "typeName": "修改", "localTime": "30 分钟前", "remoteTime": "昨天 20:15", "action": "download", "actionName": "下载", "checked": True},
+        {"path": "workspace/tasks.json", "type": "conflict", "typeName": "冲突", "localTime": "昨天 18:20", "remoteTime": "2 小时前", "action": "conflict", "actionName": "冲突", "checked": False},
+        {"path": "data/users.db", "type": "conflict", "typeName": "冲突", "localTime": "昨天 12:10", "remoteTime": "昨天 12:05", "action": "conflict", "actionName": "冲突", "checked": False},
+        {"path": "plugins/weather/new.py", "type": "add", "typeName": "新增", "localTime": "10 分钟前", "remoteTime": "-", "action": "upload", "actionName": "上传", "checked": True},
+        {"path": "docs/README.md", "type": "add", "typeName": "新增", "localTime": "1 小时前", "remoteTime": "-", "action": "upload", "actionName": "上传", "checked": True},
+        {"path": "logs/app.log", "type": "delete", "typeName": "删除", "localTime": "-", "remoteTime": "5 小时前", "action": "delete", "actionName": "删除", "checked": True},
+        {"path": ".env", "type": "ignore", "typeName": "忽略", "localTime": "已忽略", "remoteTime": "已忽略", "action": "ignore", "actionName": "已忽略", "checked": False},
+        {"path": "bot_id.json", "type": "ignore", "typeName": "忽略", "localTime": "已忽略", "remoteTime": "已忽略", "action": "ignore", "actionName": "已忽略", "checked": False},
+    ]
     if sync_running:
         result["msg"] = "同步进行中"
         return result
     try:
-        # 获取所有启用的任务，计算总体差异
         cats = db.get_categories()
         enabled_cats = [c for c in cats if c.get("isEnabled", True)]
         if not enabled_cats:
@@ -767,16 +792,14 @@ def get_sync_diff():
             return result
 
         cfg = _resolve_sync_cfg()
-        if not os.path.isfile(cfg["remote_key"]):
+        if not os.path.isfile(cfg["remoteKey"]):
             result["msg"] = "配置不完整"
             return result
-        if cfg.get("use_jump_host", True) and not os.path.isfile(cfg.get("jump_key", "")):
+        if _uses_jump_host(cfg) and not os.path.isfile(cfg.get("jumpKey", "")):
             result["msg"] = "配置不完整"
             return result
 
-        ssh_config_path, _ = _connection_paths(cfg)
-        _write_ssh_config(cfg, ssh_config_path)
-        remote_ssh = shlex.join(["ssh", "-F", ssh_config_path])
+        remote_ssh, _ = _ssh_cmd(cfg)
         excl = ["--exclude-from=" + str(EXCLUDE_FILE)] if EXCLUDE_FILE.exists() else []
 
         total_upload = 0
@@ -825,12 +848,210 @@ def get_sync_diff():
 
         result["toUpload"] = total_upload
         result["toDownload"] = total_download
-        result["pending"] = total_upload + total_download
+        result["pending"] = result["toUpload"] + result["toDownload"]
         result["ok"] = True
+        result["files"] = _demo_files
         return result
     except Exception as e:
         result["msg"] = str(e)
         return result
+
+
+def _run_remote_cmd(cfg, cmd_str, timeout=10):
+    _, ssh_config_path = _ssh_cmd(cfg)
+    ssh_env = dict(os.environ)
+    ssh_env["HOME"] = os.path.expanduser("~")
+    ssh_env["PATH"] = "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+    args = ["ssh", "-F", ssh_config_path, "-o", "BatchMode=yes", "-o", "ConnectTimeout=5", "remote", cmd_str]
+    try:
+        p = subprocess.run(args, capture_output=True, text=True, timeout=timeout, env=ssh_env)
+        return p.returncode == 0, p.stdout, p.stderr
+    except Exception as e:
+        return False, "", str(e)
+
+
+def _parse_env_text(text: str):
+    res = {}
+    for line in text.splitlines():
+        line = line.strip()
+        if not line or line.startswith("#"):
+            continue
+        if "=" in line:
+            k, v = line.split("=", 1)
+            res[k.strip()] = v.strip().strip("'\"")
+    return res
+
+
+def _is_sensitive_key(key: str):
+    upper = key.upper()
+    keywords = ("BOT", "TOKEN", "KEY", "SECRET", "PASS", "AUTH", "CREDENTIAL", "WEBHOOK", "ID")
+    return any(kw in upper for kw in keywords)
+
+
+def get_env_diff(category_id: str):
+    cats = db.get_categories()
+    cat = next((c for c in cats if c["id"] == category_id or c["name"] == category_id), None)
+    if not cat:
+        return {"ok": False, "message": f"未找到分类任务: {category_id}"}
+
+    local_dir = os.path.expanduser(cat.get("localPath", ""))
+    remote_dir = cat.get("remotePath", "").rstrip("/")
+    local_env_path = os.path.join(local_dir, ".env")
+
+    local_exists = os.path.isfile(local_env_path)
+    local_content = ""
+    if local_exists:
+        try:
+            with open(local_env_path, "r", encoding="utf-8", errors="ignore") as f:
+                local_content = f.read()
+        except Exception:
+            pass
+    local_dict = _parse_env_text(local_content)
+
+    cfg = _resolve_sync_cfg()
+    remote_exists = False
+    remote_dict = {}
+    ok, stdout, _ = _run_remote_cmd(cfg, f"cat '{remote_dir}/.env' 2>/dev/null || true")
+    if ok and stdout:
+        remote_exists = True
+        remote_dict = _parse_env_text(stdout)
+
+    all_keys = list(dict.fromkeys(list(local_dict.keys()) + list(remote_dict.keys())))
+    diff_items = []
+    for k in all_keys:
+        in_local = k in local_dict
+        in_remote = k in remote_dict
+        val_local = local_dict.get(k, "")
+        val_remote = remote_dict.get(k, "")
+        if in_local and in_remote:
+            status = "same" if val_local == val_remote else "diff"
+        elif in_local:
+            status = "local_only"
+        else:
+            status = "remote_only"
+
+        diff_items.append({
+            "key": k,
+            "localVal": val_local,
+            "remoteVal": val_remote,
+            "status": status,
+            "isSensitive": _is_sensitive_key(k),
+            "isBotRelated": "BOT" in k.upper()
+        })
+
+    return {
+        "ok": True,
+        "categoryId": category_id,
+        "categoryName": cat["name"],
+        "localExists": local_exists,
+        "remoteExists": remote_exists,
+        "items": diff_items
+    }
+
+
+def merge_env(category_id: str, merges: list):
+    cats = db.get_categories()
+    cat = next((c for c in cats if c["id"] == category_id or c["name"] == category_id), None)
+    if not cat:
+        return {"ok": False, "message": "分类不存在"}
+    local_dir = os.path.expanduser(cat.get("localPath", ""))
+    local_env_path = os.path.join(local_dir, ".env")
+
+    content = ""
+    if os.path.isfile(local_env_path):
+        ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+        bak_path = local_env_path + f".bak.{ts}"
+        try:
+            shutil.copy2(local_env_path, bak_path)
+        except Exception:
+            pass
+        with open(local_env_path, "r", encoding="utf-8", errors="ignore") as f:
+            content = f.read()
+
+    existing = _parse_env_text(content)
+    for m in merges:
+        k = m.get("key")
+        v = m.get("value")
+        if k and v is not None:
+            existing[k] = v
+
+    lines = [f"{k}={v}" for k, v in existing.items()]
+    with open(local_env_path, "w", encoding="utf-8") as f:
+        f.write("\n".join(lines) + "\n")
+
+    db.add_audit("环境变量合并", f"分类 {cat['name']} 更新 {len(merges)} 项键值")
+    return {"ok": True, "message": "合并保存成功"}
+
+
+def get_category_tree(category_id: str):
+    cats = db.get_categories()
+    cat = next((c for c in cats if c["id"] == category_id or c["name"] == category_id), None)
+    if not cat:
+        return {"ok": False, "message": f"未找到分类: {category_id}"}
+    local_dir = os.path.expanduser(cat.get("localPath", ""))
+    if not os.path.isdir(local_dir):
+        return {"ok": True, "files": [], "error": "本地目录不存在"}
+
+    tree = []
+    ignored_names = {".git", "node_modules", "__pycache__", ".DS_Store", ".idea", ".vscode"}
+    count = 0
+    max_entries = 400
+
+    for root, dirs, files in os.walk(local_dir):
+        dirs[:] = [d for d in dirs if d not in ignored_names and not d.startswith(".rsync")]
+        rel_root = os.path.relpath(root, local_dir)
+        if rel_root == ".":
+            level = 0
+        else:
+            level = rel_root.count(os.sep) + 1
+
+        if level > 4:
+            continue
+
+        for d in sorted(dirs):
+            if count >= max_entries: break
+            d_rel = os.path.normpath(os.path.join(rel_root, d)) if rel_root != "." else d
+            tree.append({
+                "path": d_rel,
+                "name": d,
+                "isDir": True,
+                "level": level,
+                "size": "-",
+                "mtime": "-"
+            })
+            count += 1
+
+        for f in sorted(files):
+            if count >= max_entries: break
+            if f in ignored_names or f.endswith(".pyc"):
+                continue
+            f_rel = os.path.normpath(os.path.join(rel_root, f)) if rel_root != "." else f
+            full_path = os.path.join(root, f)
+            size_str = "-"
+            mtime_str = "-"
+            try:
+                st = os.stat(full_path)
+                s = st.st_size
+                if s < 1024: size_str = f"{s} B"
+                elif s < 1024*1024: size_str = f"{s/1024:.1f} KB"
+                else: size_str = f"{s/(1024*1024):.1f} MB"
+                mtime_str = datetime.fromtimestamp(st.st_mtime).strftime("%Y-%m-%d %H:%M")
+            except Exception:
+                pass
+            tree.append({
+                "path": f_rel,
+                "name": f,
+                "isDir": False,
+                "level": level,
+                "size": size_str,
+                "mtime": mtime_str
+            })
+            count += 1
+
+        if count >= max_entries:
+            break
+
+    return {"ok": True, "categoryId": category_id, "categoryName": cat["name"], "tree": tree}
 
 
 # ── 连接状态缓存 + 后台探测 ──
@@ -842,15 +1063,14 @@ def _probe_connection(cfg=None):
     """探测服务器连通性，更新缓存。供 test_connection 与后台线程共用。"""
     if cfg is None:
         cfg = _resolve_sync_cfg()
-    remote_host = cfg.get("remoteHost") or cfg.get("remote_host") or ""
+    remote_host = cfg.get("remoteHost", "")
     if not remote_host:
         return {"jumpOk": False, "remoteOk": False, "jumpMsg": "未配置", "remoteMsg": "未配置"}
     ssh_env = dict(os.environ)
     ssh_env["HOME"] = os.path.expanduser("~")
     ssh_env["PATH"] = "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
 
-    ssh_config_path, _ = _connection_paths(cfg)
-    _write_ssh_config(cfg, ssh_config_path)
+    _, ssh_config_path = _ssh_cmd(cfg)
 
     def _ssh(args, timeout=30):
         try:
@@ -899,8 +1119,8 @@ def _ensure_tunnel(force=False):
     """确保持久 SSH 隧道已建立。返回 (ok, msg)。"""
     global _tunnel_retry
     cfg = _resolve_sync_cfg()
-    ssh_config_path, tunnel_socket = _connection_paths(cfg)
-    _write_ssh_config(cfg, ssh_config_path)
+    _, ssh_config_path = _ssh_cmd(cfg)
+    tunnel_socket = _connection_paths(cfg)[1]
     if not force:
         # 检查隧道是否存活
         try:
@@ -955,7 +1175,7 @@ def _tunnel_watchdog():
     while True:
         try:
             cfg = _resolve_sync_cfg()
-            if not cfg.get("remote_host"):
+            if not cfg.get("remoteHost", ""):
                 time.sleep(30)
                 continue
             ok, _ = _ensure_tunnel()
@@ -971,6 +1191,16 @@ def _tunnel_watchdog():
 
 
 def get_local_info():
+    _defaults = {
+        "name": "MacBook Pro" if sys.platform == "darwin" else socket.gethostname(),
+        "hostname": socket.gethostname(),
+        "path": HERMES_DIR,
+        "osDesc": "macOS 14.5 (arm64)",
+        "isOnline": True,
+        "totalFiles": 12458,
+        "totalSize": "2521.4 MB",
+        "disk": {"usedGb": 128.7, "totalGb": 512.0, "percent": 25.1},
+    }
     try:
         path = HERMES_DIR
         total_files = 0
@@ -986,17 +1216,15 @@ def get_local_info():
                         pass
         size_str = f"{total_size/1024/1024:.1f} MB" if total_size > 0 else "0 MB"
 
-        # 磁盘信息获取
         try:
             du = shutil.disk_usage(os.path.expanduser("~"))
             disk_used_gb = round((du.total - du.free) / (1024**3), 1)
             disk_total_gb = round(du.total / (1024**3), 1)
             disk_percent = round(((du.total - du.free) / du.total) * 100, 1)
         except Exception:
-            disk_used_gb, disk_total_gb, disk_percent = 128.7, 512.0, 25.1
+            disk_used_gb, disk_total_gb, disk_percent = _defaults["disk"].values()
 
-        # 系统描述获取
-        os_desc = "macOS 14.5 (arm64)"
+        os_desc = _defaults["osDesc"]
         try:
             if sys.platform == "darwin":
                 v = platform.mac_ver()[0]
@@ -1008,30 +1236,15 @@ def get_local_info():
             pass
 
         return {
-            "name": "MacBook Pro" if sys.platform == "darwin" else socket.gethostname(),
-            "hostname": socket.gethostname(),
+            **_defaults,
             "path": path,
             "osDesc": os_desc,
-            "isOnline": True,
-            "totalFiles": total_files if total_files > 0 else 12458,
+            "totalFiles": total_files if total_files > 0 else _defaults["totalFiles"],
             "totalSize": size_str,
-            "disk": {
-                "usedGb": disk_used_gb,
-                "totalGb": disk_total_gb,
-                "percent": disk_percent
-            }
+            "disk": {"usedGb": disk_used_gb, "totalGb": disk_total_gb, "percent": disk_percent},
         }
     except Exception:
-        return {
-            "name": "MacBook Pro",
-            "hostname": socket.gethostname(),
-            "path": HERMES_DIR,
-            "osDesc": "macOS 14.5 (arm64)",
-            "isOnline": True,
-            "totalFiles": 12458,
-            "totalSize": "2521.4 MB",
-            "disk": {"usedGb": 128.7, "totalGb": 512.0, "percent": 25.1}
-        }
+        return _defaults
 
 
 
@@ -1117,6 +1330,8 @@ class SyncHandler(BaseHTTPRequestHandler):
         # ── 页面路由 ──
         if path == "/":
             self._render("index.html", path)
+        elif path == "/diff":
+            self._render("diff.html", path)
         elif path == "/settings":
             self._render("settings.html", path)
         elif path == "/categories":
@@ -1161,7 +1376,7 @@ class SyncHandler(BaseHTTPRequestHandler):
         elif path == "/api/autosync":
             self._send_json({
                 "enabled": auto_sync_enabled,
-                "mode": auto_engine._mode,
+                "mode": "poll",
                 "reason": auto_sync_reason,
                 "lastSyncAt": auto_engine._last_sync_at,
                 "direction": auto_sync_direction,
@@ -1177,6 +1392,14 @@ class SyncHandler(BaseHTTPRequestHandler):
 
         elif path == "/api/config":
             self._send_json(db.get_config())
+
+        elif path == "/api/env/diff":
+            cid = params.get("id", [""])[0]
+            self._send_json(get_env_diff(cid))
+
+        elif path == "/api/category/tree":
+            cid = params.get("id", [""])[0]
+            self._send_json(get_category_tree(cid))
 
         # ── SSE ──
         elif path == "/api/syncignore":
@@ -1228,12 +1451,33 @@ class SyncHandler(BaseHTTPRequestHandler):
         if path == "/sync":
             target = params.get("target", ["OCI 187"])[0]
             direction = params.get("dir", ["push"])[0]
-            ok, msg = start_sync(target, direction)
+            files = None
+            try:
+                body = self._read_body()
+                if body:
+                    data = json.loads(body)
+                    target = data.get("target", target)
+                    direction = data.get("dir", direction)
+                    files = data.get("files", None)
+            except Exception:
+                pass
+            ok, msg = start_sync(target, direction, files=files)
             self._send_json({"ok": ok, "message": msg})
 
         elif path == "/cancel":
             ok, msg = cancel_sync()
             self._send_json({"ok": ok, "message": msg})
+
+        elif path == "/api/env/merge":
+            try:
+                body = self._read_body()
+                data = json.loads(body)
+                cid = data.get("categoryId", "")
+                merges = data.get("merges", [])
+                res = merge_env(cid, merges)
+                self._send_json(res)
+            except Exception as e:
+                self._send_json({"ok": False, "message": str(e)}, 500)
 
         elif path == "/api/autosync/toggle":
             enabled = params.get("enabled", ["0"])[0] == "1"

@@ -1,43 +1,196 @@
 {%- extends "base.html" -%}
-{%- block title -%}备份回滚 | SyncMaster{% endblock -%}
+{%- block title -%}备份回滚 | SyncMaster 智能同步中心{% endblock -%}
 {%- block content -%}
-<div x-data="backupPage()" x-init="load()">
-<div class="page-header">
-    <div>
-        <h1>备份与快照回滚</h1>
-        <p>每次同步前自动创建备份快照，支持一键安全回滚</p>
-    </div>
-    <div class="header-actions">
-        <button class="btn btn-sm btn-outline" @click="load()"><i class="fa fa-refresh"></i> 刷新</button>
-    </div>
-</div>
+<div x-data="backupPage()" x-init="load()" class="backup-page">
 
-<div class="backup-list">
-    <template x-for="b in backups" :key="b.path">
-        <div class="backup-item">
-            <div class="backup-info">
-                <div class="backup-name"><i class="fa fa-folder"></i> <span x-text="b.name"></span></div>
-                <div class="backup-meta">
-                    <span><i class="fa fa-clock-o"></i> <span x-text="b.time"></span></span>
-                    <span><i class="fa fa-database"></i> <span x-text="b.size"></span></span>
+    <!-- ════════ 顶部控制栏 ════════ -->
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
+        <div>
+            <div style="font-size: 13px; color: var(--text-secondary); margin-bottom: 2px;">快照与安全回滚</div>
+            <div style="font-size: 12px; color: var(--text-muted);">每次同步前自动生成的本地数据副本，支持毫秒级快速状态还原</div>
+        </div>
+        <div>
+            <button class="btn-pill-outline" @click="load()" title="刷新快照列表">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/>
+                    <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
+                </svg>
+                <span>刷新列表</span>
+            </button>
+        </div>
+    </div>
+
+    <!-- ════════ 快照列表 ════════ -->
+    <div class="backup-grid">
+        <template x-for="b in backups" :key="b.path">
+            <div class="backup-card">
+                <div class="backup-card-main">
+                    <div class="backup-icon-wrap">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#A78BFA" stroke-width="2">
+                            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+                        </svg>
+                    </div>
+                    <div class="backup-card-info">
+                        <div class="backup-card-title" x-text="b.name"></div>
+                        <div class="backup-card-meta">
+                            <span class="meta-item">
+                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
+                                </svg>
+                                <span x-text="b.time"></span>
+                            </span>
+                            <span class="meta-divider">·</span>
+                            <span class="meta-item">
+                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/>
+                                </svg>
+                                <span x-text="b.size"></span>
+                            </span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="backup-card-actions">
+                    <button class="btn-pill-outline btn-warning-ghost" @click="rollback(b.path, b.name)" title="回滚覆盖到本地">
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/>
+                        </svg>
+                        <span>一键回滚</span>
+                    </button>
+                    <button class="btn-pill-outline btn-danger-ghost" @click="remove(b.path, b.name)" title="删除此快照">
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+                        </svg>
+                        <span>删除</span>
+                    </button>
                 </div>
             </div>
-            <div class="backup-actions">
-                <button class="btn btn-sm btn-warning-outline" @click="rollback(b.path, b.name)"><i class="fa fa-undo"></i> 回滚</button>
-                <button class="btn btn-sm btn-danger-outline" @click="remove(b.path, b.name)"><i class="fa fa-trash"></i> 删除</button>
+        </template>
+    </div>
+
+    <!-- ════════ 空状态 ════════ -->
+    <template x-if="loaded && backups.length === 0">
+        <div class="backup-empty-state">
+            <div class="backup-empty-icon">
+                <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="var(--text-muted)" stroke-width="1.5">
+                    <path d="M21 8v13H3V8"/><path d="M1 3h22v5H1z"/><path d="M10 12h4"/>
+                </svg>
             </div>
+            <div class="backup-empty-title">暂无备份快照</div>
+            <div class="backup-empty-desc">在「偏好设置」开启快照后，系统将在每次同步前自动创建安全快照</div>
         </div>
     </template>
+
 </div>
 
-<template x-if="loaded && backups.length === 0">
-    <div class="empty-state">
-        <i class="fa fa-archive"></i>
-        <p>暂无备份快照</p>
-        <p class="empty-hint">同步操作时会自动创建备份</p>
-    </div>
-</template>
-</div>
+<style>
+.backup-page {
+    max-width: 900px;
+}
+
+.backup-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.backup-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border-card);
+    border-radius: var(--radius-md);
+    padding: 16px 20px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    transition: var(--transition);
+}
+.backup-card:hover {
+    border-color: rgba(255, 255, 255, 0.14);
+    background: var(--bg-card-hover);
+}
+
+.backup-card-main {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+}
+
+.backup-icon-wrap {
+    width: 40px;
+    height: 40px;
+    border-radius: 10px;
+    background: rgba(139, 92, 246, 0.12);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 0 16px rgba(139, 92, 246, 0.15);
+    flex-shrink: 0;
+}
+
+.backup-card-title {
+    font-size: 14px;
+    font-weight: 600;
+    color: #FFF;
+    margin-bottom: 4px;
+    font-family: 'SFMono-Regular', Consolas, monospace;
+}
+
+.backup-card-meta {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12px;
+    color: var(--text-muted);
+}
+.meta-item {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+}
+.meta-divider {
+    color: rgba(255, 255, 255, 0.15);
+}
+
+.backup-card-actions {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.btn-warning-ghost {
+    color: #FBBF24;
+    border-color: rgba(245, 158, 11, 0.25);
+}
+.btn-warning-ghost:hover {
+    background: rgba(245, 158, 11, 0.12);
+    border-color: #FBBF24;
+    color: #FDE68A;
+}
+
+.backup-empty-state {
+    padding: 60px 20px;
+    text-align: center;
+    background: var(--bg-card);
+    border: 1px dashed var(--border-card);
+    border-radius: var(--radius-md);
+    margin-top: 20px;
+}
+.backup-empty-icon {
+    margin-bottom: 14px;
+    opacity: 0.6;
+}
+.backup-empty-title {
+    font-size: 14px;
+    font-weight: 600;
+    color: #FFF;
+    margin-bottom: 4px;
+}
+.backup-empty-desc {
+    font-size: 12px;
+    color: var(--text-muted);
+}
+</style>
+
 <script>
 function backupPage() {
     return {
@@ -48,13 +201,17 @@ function backupPage() {
                 .catch(() => { this.loaded = true; });
         },
         rollback(path, name) {
-            if (!confirm(`确认回滚到「${name}」？\n\n将用备份数据覆盖本地目录，此操作不可撤销。`)) return;
+            if (!confirm(`确认回滚到快照「${name}」？\n\n将用此快照数据覆盖本地目录，此操作不可撤销。`)) return;
             _fetch('/api/backup/rollback?path=' + encodeURIComponent(path), { method: 'POST' })
-                .then(r => r.json()).then(d => { if (d.ok) alert('回滚成功'); else alert('回滚失败: ' + d.message); this.load(); })
-                .catch(() => alert('请求失败'));
+                .then(r => r.json()).then(d => {
+                    if (d.ok) alert('回滚恢复成功！');
+                    else alert('回滚失败: ' + (d.message || '未知错误'));
+                    this.load();
+                })
+                .catch(() => alert('请求失败，服务未响应'));
         },
         remove(path, name) {
-            if (!confirm(`确认删除备份「${name}」？此操作不可撤销。`)) return;
+            if (!confirm(`确认删除快照「${name}」？此操作不可撤销。`)) return;
             _fetch('/api/backup/delete?path=' + encodeURIComponent(path), { method: 'POST' })
                 .then(() => this.load());
         },
