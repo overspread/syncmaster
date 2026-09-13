@@ -1,78 +1,64 @@
 {%- extends "base.html" -%}
 {%- block title -%}备份回滚 | SyncMaster{% endblock -%}
 {%- block content -%}
+<div x-data="backupPage()" x-init="load()">
 <div class="page-header">
     <div>
         <h1>备份与快照回滚</h1>
         <p>每次同步前自动创建备份快照，支持一键安全回滚</p>
     </div>
     <div class="header-actions">
-        <button class="btn btn-sm btn-outline" onclick="loadBackups()"><i class="fa fa-refresh"></i> 刷新</button>
+        <button class="btn btn-sm btn-outline" @click="load()"><i class="fa fa-refresh"></i> 刷新</button>
     </div>
 </div>
 
-<div id="backup-list" class="backup-list">
-</div>
-
-<div id="backup-empty" class="empty-state" style="display:none;">
-    <i class="fa fa-archive"></i>
-    <p>暂无备份快照</p>
-    <p class="empty-hint">同步操作时会自动创建备份</p>
-</div>
-
-<script>
-function esc(s) { const d = document.createElement('div'); d.textContent = s!=null?String(s):''; return d.innerHTML; }
-
-async function loadBackups() {
-    const resp = await _fetch('/api/backups');
-    const backups = await resp.json();
-    const list = document.getElementById('backup-list');
-    const empty = document.getElementById('backup-empty');
-    if (!backups.length) {
-        list.innerHTML = '';
-        empty.style.display = 'flex';
-        return;
-    }
-    empty.style.display = 'none';
-    list.innerHTML = backups.map(b => `
+<div class="backup-list">
+    <template x-for="b in backups" :key="b.path">
         <div class="backup-item">
             <div class="backup-info">
-                <div class="backup-name"><i class="fa fa-folder"></i> ${esc(b.name)}</div>
+                <div class="backup-name"><i class="fa fa-folder"></i> <span x-text="b.name"></span></div>
                 <div class="backup-meta">
-                    <span><i class="fa fa-clock-o"></i> ${esc(b.time)}</span>
-                    <span><i class="fa fa-database"></i> ${esc(b.size)}</span>
+                    <span><i class="fa fa-clock-o"></i> <span x-text="b.time"></span></span>
+                    <span><i class="fa fa-database"></i> <span x-text="b.size"></span></span>
                 </div>
             </div>
             <div class="backup-actions">
-                <button class="btn btn-sm btn-warning-outline" onclick="rollbackBackup('${esc(b.path)}','${esc(b.name)}')">
-                    <i class="fa fa-undo"></i> 回滚
-                </button>
-                <button class="btn btn-sm btn-danger-outline" onclick="deleteBackup('${esc(b.path)}','${esc(b.name)}')">
-                    <i class="fa fa-trash"></i> 删除
-                </button>
+                <button class="btn btn-sm btn-warning-outline" @click="rollback(b.path, b.name)"><i class="fa fa-undo"></i> 回滚</button>
+                <button class="btn btn-sm btn-danger-outline" @click="remove(b.path, b.name)"><i class="fa fa-trash"></i> 删除</button>
             </div>
         </div>
-    `).join('');
-}
+    </template>
+</div>
 
-async function rollbackBackup(path, name) {
-    if (!confirm(`确认回滚到「${name}」？\n\n将用备份数据覆盖本地目录，此操作不可撤销。`)) return;
-    const resp = await _fetch(`/api/backup/rollback?path=${encodeURIComponent(path)}`, { method: 'POST' });
-    const data = await resp.json();
-    if (data.ok) {
-        alert('回滚成功');
-document.addEventListener('DOMContentLoaded', loadBackups);
-    } else {
-        alert('回滚失败: ' + data.message);
-    }
+<template x-if="loaded && backups.length === 0">
+    <div class="empty-state">
+        <i class="fa fa-archive"></i>
+        <p>暂无备份快照</p>
+        <p class="empty-hint">同步操作时会自动创建备份</p>
+    </div>
+</template>
+</div>
+<script>
+function backupPage() {
+    return {
+        backups: [], loaded: false,
+        load() {
+            this.loaded = false;
+            _fetch('/api/backups').then(r => r.json()).then(b => { this.backups = b; this.loaded = true; })
+                .catch(() => { this.loaded = true; });
+        },
+        rollback(path, name) {
+            if (!confirm(`确认回滚到「${name}」？\n\n将用备份数据覆盖本地目录，此操作不可撤销。`)) return;
+            _fetch('/api/backup/rollback?path=' + encodeURIComponent(path), { method: 'POST' })
+                .then(r => r.json()).then(d => { if (d.ok) alert('回滚成功'); else alert('回滚失败: ' + d.message); this.load(); })
+                .catch(() => alert('请求失败'));
+        },
+        remove(path, name) {
+            if (!confirm(`确认删除备份「${name}」？此操作不可撤销。`)) return;
+            _fetch('/api/backup/delete?path=' + encodeURIComponent(path), { method: 'POST' })
+                .then(() => this.load());
+        },
+    };
 }
-
-async function deleteBackup(path, name) {
-    if (!confirm(`确认删除备份「${name}」？此操作不可撤销。`)) return;
-    await _fetch(`/api/backup/delete?path=${encodeURIComponent(path)}`, { method: 'POST' });
-    loadBackups();
-}
-
-loadBackups();
 </script>
 {% endblock -%}

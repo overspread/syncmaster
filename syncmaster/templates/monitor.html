@@ -7,8 +7,8 @@
         <p>同步进度、速率、文件处理实时状态</p>
     </div>
     <div class="header-actions">
-        <button class="btn btn-sm btn-success" onclick="runSync('push', this)"><i class="fa fa-play"></i> 开始同步</button>
-        <button class="btn btn-sm btn-danger-outline" onclick="cancelSync()"><i class="fa fa-stop"></i> 停止</button>
+        <a href="/categories" class="btn btn-sm btn-primary" style="text-decoration:none;"><i class="fa fa-tasks"></i> 管理同步任务</a>
+        <button class="btn btn-sm btn-danger-outline" id="btn-stop" x-show="$store.sync.running" @click="$store.sync.cancel($el)" x-cloak><i class="fa fa-stop"></i> 停止</button>
     </div>
 </div>
 
@@ -17,28 +17,28 @@
     <div class="stat-card">
         <i class="fa fa-tachometer stat-icon"></i>
         <div class="stat-content">
-            <div class="stat-value" id="mon-speed">0 KB/s</div>
+            <div class="stat-value" x-text="$store.sync.stats.speed || '0 KB/s'"></div>
             <div class="stat-label">实时速率</div>
         </div>
     </div>
     <div class="stat-card">
         <i class="fa fa-file-text stat-icon"></i>
         <div class="stat-content">
-            <div class="stat-value" id="mon-done">0/0</div>
+            <div class="stat-value"><span x-text="$store.sync.stats.done || 0"></span>/<span x-text="Math.max($store.sync.stats.total || 0, $store.sync.stats.done || 0)"></span></div>
             <div class="stat-label">已处理文件</div>
         </div>
     </div>
     <div class="stat-card">
         <i class="fa fa-check-circle stat-icon"></i>
         <div class="stat-content">
-            <div class="stat-value" id="mon-percent">0%</div>
+            <div class="stat-value" x-text="Math.round($store.sync.stats.percent || 0) + '%'"></div>
             <div class="stat-label">完成进度</div>
         </div>
     </div>
     <div class="stat-card">
         <i class="fa fa-clock-o stat-icon"></i>
         <div class="stat-content">
-            <div class="stat-value" id="mon-eta">--:--</div>
+            <div class="stat-value" x-text="$store.sync.stats.eta || '--:--'"></div>
             <div class="stat-label">预计剩余</div>
         </div>
     </div>
@@ -48,16 +48,16 @@
 <div class="card">
     <div class="card-header">
         <h3>同步进度</h3>
-        <span class="monitor-status" id="mon-status">就绪</span>
+        <span class="monitor-status" x-text="$store.sync.stats.status || '就绪'"></span>
     </div>
     <div class="card-body">
         <div class="progress-bar-wrap">
-            <div class="progress-bar-fill" id="mon-progress" style="width:0%;"></div>
+            <div class="progress-bar-fill" :style="`width:${$store.sync.stats.percent || 0}%`"></div>
         </div>
-        <div class="progress-current-file" id="mon-current">等待开始...</div>
+        <div class="progress-current-file" x-text="$store.sync.stats.currentFile || '等待开始...'"></div>
         <div class="progress-counters">
-            <span class="counter-up"><i class="fa fa-arrow-up"></i> <span id="mon-up">0</span></span>
-            <span class="counter-down"><i class="fa fa-arrow-down"></i> <span id="mon-down">0</span></span>
+            <span class="counter-up"><i class="fa fa-arrow-up"></i> <span x-text="$store.sync.stats.uploaded || 0"></span></span>
+            <span class="counter-down"><i class="fa fa-arrow-down"></i> <span x-text="$store.sync.stats.downloaded || 0"></span></span>
         </div>
     </div>
 </div>
@@ -66,72 +66,31 @@
 <div class="card">
     <div class="card-header">
         <h3>同步执行日志</h3>
-        <button class="btn btn-sm btn-outline" onclick="clearLog()"><i class="fa fa-eraser"></i> 清空</button>
+        <button class="btn btn-sm btn-outline" @click="$store.sync.logLines = []; window.sessionStorage.removeItem('sm_log')"><i class="fa fa-eraser"></i> 清空</button>
     </div>
     <div class="card-body" style="padding:0;">
-        <div id="live-log" class="live-log-area"></div>
+        <div id="live-log" class="live-log-area" x-effect="$el.textContent = $store.sync.logLines.join('\n'); $el.scrollTop = $el.scrollHeight"></div>
     </div>
 </div>
 
+<style>
+[x-cloak] { display: none !important; }
+.monitor-status.status-success { color: var(--success); }
+.monitor-status.status-fail { color: var(--danger); }
+.monitor-status.status-running { color: var(--info); }
+</style>
 <script>
-// 定时拉取监控数据
-async function loadMonitorData() {
-    const resp = await _fetch('/api/monitor');
-    const d = await resp.json();
-    updateMonitor(d);
-}
-
-function updateMonitor(d) {
-    document.getElementById('mon-speed').textContent = d.speed || '0 KB/s';
-    document.getElementById('mon-done').textContent = `${d.done || 0}/${Math.max(d.total || 0, d.done || 0)}`;
-    document.getElementById('mon-percent').textContent = `${Math.round(d.percent || 0)}%`;
-    document.getElementById('mon-eta').textContent = d.eta || '--:--';
-    document.getElementById('mon-status').textContent = d.status || '就绪';
-    document.getElementById('mon-progress').style.width = `${d.percent || 0}%`;
-    document.getElementById('mon-current').textContent = d.currentFile || '等待开始...';
-    document.getElementById('mon-up').textContent = d.uploaded || 0;
-    document.getElementById('mon-down').textContent = d.downloaded || 0;
-
-    // 状态颜色
-    const statusEl = document.getElementById('mon-status');
-    statusEl.className = 'monitor-status';
-    if ((d.status || '').includes('完成') || (d.status || '').includes('成功')) {
-        statusEl.classList.add('status-success');
-    } else if ((d.status || '').includes('失败') || (d.status || '').includes('取消')) {
-        statusEl.classList.add('status-fail');
-    } else if ((d.status || '').includes('中')) {
-        statusEl.classList.add('status-running');
-    }
-}
-
-function clearLog() {
-    document.getElementById('live-log').textContent = '';
-}
-
-document.addEventListener('DOMContentLoaded', function() {
-    loadMonitorData();
-    setInterval(loadMonitorData, 2000);
-
-    // SSE 实时事件流：收到日志时立即显示，让监控面板"活"起来
-    if (window.SM_TOKEN) {
-        const es = new EventSource('/events?token=' + window.SM_TOKEN);
-        es.onmessage = e => {
-            try {
-                const d = JSON.parse(e.data);
-                if (d.type === 'log') {
-                    const el = document.getElementById('live-log');
-                    if (el) {
-                        el.textContent += d.text + '\n';
-                        el.scrollTop = el.scrollHeight;
-                    }
-                } else if (d.type === 'started') {
-                    loadMonitorData();
-                } else if (d.type === 'done') {
-                    loadMonitorData();
-                }
-            } catch (err) { /* ignore */ }
-        };
-    }
+// 监控页状态颜色由 Alpine 计算
+document.addEventListener('alpine:initialized', () => {
+    Alpine.effect(() => {
+        const s = Alpine.store('sync').stats.status || '';
+        const el = document.querySelector('.monitor-status');
+        if (!el) return;
+        el.classList.remove('status-success', 'status-fail', 'status-running');
+        if (s.includes('完成') || s.includes('成功')) el.classList.add('status-success');
+        else if (s.includes('失败') || s.includes('取消') || s.includes('停止')) el.classList.add('status-fail');
+        else if (s.includes('中')) el.classList.add('status-running');
+    });
 });
 </script>
 {% endblock -%}

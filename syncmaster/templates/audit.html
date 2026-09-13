@@ -1,13 +1,14 @@
 {%- extends "base.html" -%}
 {%- block title -%}审计日志 | SyncMaster{% endblock -%}
 {%- block content -%}
+<div x-data="auditPage()" x-init="load()">
 <div class="page-header">
     <div>
         <h1>安全与审计日志</h1>
         <p>完整操作记录：同步、扫描、回滚、配置变更</p>
     </div>
     <div class="header-actions">
-        <button class="btn btn-sm btn-outline" onclick="loadAudit()"><i class="fa fa-refresh"></i> 刷新</button>
+        <button class="btn btn-sm btn-outline" @click="load()"><i class="fa fa-refresh"></i> 刷新</button>
     </div>
 </div>
 
@@ -21,45 +22,40 @@
                     <th>详情</th>
                 </tr>
             </thead>
-            <tbody id="audit-tbody">
-                <tr><td colspan="3" style="text-align:center;padding:40px;color:#6b7b8d;">加载中...</td></tr>
+            <tbody>
+                <template x-for="e in entries" :key="e.time + e.action">
+                    <tr>
+                        <td x-text="e.time"></td>
+                        <td :class="actionClass(e.action)" x-text="e.action"></td>
+                        <td style="color:var(--text-3);" x-text="e.detail || '-'"></td>
+                    </tr>
+                </template>
+                <template x-if="!loaded">
+                    <tr><td colspan="3" style="text-align:center;padding:40px;color:var(--text-4);">加载中...</td></tr>
+                </template>
+                <template x-if="loaded && entries.length === 0">
+                    <tr><td colspan="3" style="text-align:center;padding:40px;color:var(--text-4);">暂无审计日志</td></tr>
+                </template>
             </tbody>
         </table>
     </div>
 </div>
-
-<div id="audit-empty" class="empty-state" style="display:none;">
-    <i class="fa fa-file-text-o"></i>
-    <p>暂无审计日志</p>
 </div>
-
 <script>
-function esc(s) { const d = document.createElement('div'); d.textContent = s!=null?String(s):''; return d.innerHTML; }
-
-async function loadAudit() {
-    const resp = await _fetch('/api/audit');
-    const entries = await resp.json();
-    const tbody = document.getElementById('audit-tbody');
-    const empty = document.getElementById('audit-empty');
-    if (!entries.length) {
-        tbody.innerHTML = '';
-        empty.style.display = 'flex';
-        return;
-    }
-    empty.style.display = 'none';
-    tbody.innerHTML = entries.map(e => {
-        let actionClass = '';
-        if (e.action.includes('成功')) actionClass = 'text-success';
-        else if (e.action.includes('失败') || e.action.includes('取消') || e.action.includes('删除')) actionClass = 'text-danger';
-        return `
-        <tr>
-            <td>${esc(e.time)}</td>
-            <td class="${actionClass}">${esc(e.action)}</td>
-            <td style="color:#8899aa;">${esc(e.detail) || '-'}</td>
-        </tr>`;
-    }).join('');
+function auditPage() {
+    return {
+        entries: [], loaded: false,
+        load() {
+            this.loaded = false;
+            _fetch('/api/audit').then(r => r.json()).then(e => { this.entries = e; this.loaded = true; })
+                .catch(() => { this.loaded = true; });
+        },
+        actionClass(action) {
+            if (action.includes('成功')) return 'text-success';
+            if (action.includes('失败') || action.includes('取消') || action.includes('删除')) return 'text-danger';
+            return '';
+        },
+    };
 }
-
-document.addEventListener('DOMContentLoaded', loadAudit);
 </script>
 {% endblock -%}

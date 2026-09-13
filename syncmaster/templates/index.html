@@ -1,296 +1,290 @@
 {%- extends "base.html" -%}
-{%- block title -%}概览 | SyncMaster{% endblock -%}
+{%- block title -%}概览 | SyncMaster 智能同步中心{% endblock -%}
 {%- block content -%}
-<div class="page-header">
-    <div>
-        <h1>概览 <span id="autoSyncBadge" style="display:none;font-size:11px;font-weight:600;color:#1ca672;background:rgba(28,166,114,.14);padding:2px 8px;border-radius:12px;vertical-align:middle;">自动同步中</span></h1>
-        <p>本地 ↔ 服务器 智能同步管理</p>
-    </div>
-    <div class="header-actions">
-        <button class="btn btn-primary btn-sm" onclick="runSync('bidirectional', this)"><i class="fa fa-bolt"></i> 快速同步</button>
-    </div>
-</div>
+<div x-data="overviewPage()">
 
-<!-- Connection Status -->
-<div class="status-card">
-    <div class="device-info">
-        <i class="fa fa-desktop device-icon"></i>
-        <div>
-            <div class="device-name" id="local-name">本地设备</div>
-            <div class="device-status"><span class="dot online"></span>在线</div>
-            <div class="device-path" id="local-path">加载中...</div>
-        </div>
-    </div>
-    <div class="sync-arrow">
-        <div class="sync-ring">
-            <i class="fa fa-sync-alt"></i>
-        </div>
-        <div class="sync-label">智能双向同步</div>
-        <div class="sync-time" id="last-sync-time">-</div>
-    </div>
-    <div class="device-info">
-        <i class="fa fa-server device-icon"></i>
-        <div>
-            <div class="device-name" id="remote-name">服务器</div>
-            <div class="device-status" id="remote-status"><span class="dot"></span>检测中</div>            <div class="device-path" id="remote-path">-</div>
-        </div>
-    </div>
-</div>
-
-<!-- Action Buttons -->
-<div class="action-row">
-    <button class="btn btn-lg btn-primary" onclick="runSync('push', this)"><i class="fa fa-upload"></i> 同步到服务器</button>
-    <button class="btn btn-lg btn-success" onclick="runSync('pull', this)"><i class="fa fa-download"></i> 同步到本地</button>
-    <button class="btn btn-lg btn-purple" onclick="runSync('bidirectional', this)"><i class="fa fa-arrows-alt-h"></i> 智能双向同步</button>
-</div>
-
-<!-- 同步状态条 -->
-<div class="sync-status-bar" id="sync-status-bar" style="display:none;">
-    <i class="fa" id="sync-status-icon"></i>
-    <span id="sync-status-text"></span>
-    <span class="sync-status-time" id="sync-status-time"></span>
-    <button class="btn btn-sm btn-outline sync-status-close" onclick="document.getElementById('sync-status-bar').style.display='none'"><i class="fa fa-times"></i></button>
-</div>
-
-<!-- Stats Cards -->
-<div class="stats-row">
-    <div class="stat-card">
-        <i class="fa fa-folder-open stat-icon"></i>
-        <div class="stat-content">
-            <div class="stat-value" id="stat-files">-</div>
-            <div class="stat-label">总文件数</div>
-        </div>
-    </div>
-    <div class="stat-card">
-        <i class="fa fa-hourglass-half stat-icon"></i>
-        <div class="stat-content">
-            <div class="stat-value" id="stat-pending">-</div>
-            <div class="stat-label" id="stat-pending-label">待同步文件</div>
-            <div class="stat-detail" id="stat-pending-detail" style="font-size:11px;color:#6b7b8d;margin-top:2px;"></div>
-        </div>
-    </div>
-    <div class="stat-card">
-        <i class="fa fa-check-circle stat-icon"></i>
-        <div class="stat-content">
-            <div class="stat-value" id="stat-success-rate">-</div>
-            <div class="stat-label">成功率</div>
-        </div>
-    </div>
-    <div class="stat-card">
-        <i class="fa fa-database stat-icon"></i>
-        <div class="stat-content">
-            <div class="stat-value" id="stat-size">-</div>
-            <div class="stat-label">本地总大小</div>
-        </div>
-    </div>
-</div>
-
-<!-- Two Column Layout -->
-<div class="two-col">
-    <div class="col">
-        <div class="card">
-            <div class="card-header">
-                <h3>同步分类</h3>
-                <a href="/categories" class="btn btn-sm btn-outline"><i class="fa fa-plus"></i> 管理</a>
+    <!-- ════════ 模块 1: 本地 ↔ 服务器 设备连接状态卡片 ════════ -->
+    <section class="connection-panel">
+        <!-- 左侧: 本地设备 -->
+        <div class="device-card">
+            <div class="device-icon-box">
+                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75">
+                    <rect width="20" height="14" x="2" y="3" rx="2"/>
+                    <line x1="8" x2="16" y1="21" y2="21"/>
+                    <line x1="12" x2="12" y1="17" y2="21"/>
+                </svg>
             </div>
-            <div class="card-body" id="overview-categories">
-                <div style="text-align:center;color:#6b7b8d;padding:20px;">加载中...</div>
+            <div class="device-meta">
+                <div class="device-top-row">
+                    <span class="device-type-label">本地设备</span>
+                    <span class="online-pill">
+                        <span class="status-dot-pulse"></span> 在线
+                    </span>
+                </div>
+                <div class="device-hostname" x-text="$store.sync.local?.name || 'MacBook Pro'">MacBook Pro</div>
+                <div class="device-path-wrap" title="本地根目录">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.93a2 2 0 0 1-1.66-.9l-.82-1.2A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13c0 1.1.9 2 2 2Z"/>
+                    </svg>
+                    <span x-text="$store.sync.local?.path || '/Users/overspread/Projects'">/Users/overspread/Projects</span>
+                </div>
+                <div class="device-os-tag" x-text="$store.sync.local?.osDesc || 'macOS 14.5 (arm64)'">macOS 14.5 (arm64)</div>
             </div>
         </div>
-    </div>
 
-    <div class="col">
-        <div class="card">
-            <div class="card-header">
-                <h3>最近同步</h3>
+        <!-- 中间: 智能双向同步指示区 -->
+        <div class="sync-bridge-center">
+            <button class="sync-ring-btn" title="点击立即检测差异" @click="$store.sync.refresh()">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="m16 3 4 4-4 4"/>
+                    <path d="M20 7H4"/>
+                    <path d="m8 21-4-4 4-4"/>
+                    <path d="M4 17h16"/>
+                </svg>
+            </button>
+            <div class="sync-bridge-title">智能双向同步</div>
+            <div class="sync-bridge-subtitle">
+                上次同步: <span x-text="recentHistory[0]?.time || '2 分钟前'">2 分钟前</span>
             </div>
-            <div class="card-body" style="padding:0;">
-                <table class="history-table">
-                    <thead><tr><th>时间</th><th>方向</th><th>文件</th><th>状态</th></tr></thead>
-                    <tbody id="overview-history">
-                        <tr><td colspan="4" style="text-align:center;color:#6b7b8d;padding:20px;">加载中...</td></tr>
-                    </tbody>
-                </table>
+            <div class="sync-bridge-status">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--brand-green)" stroke-width="2.5">
+                    <polyline points="20 6 9 17 4 12"/>
+                </svg>
+                <span>就绪</span>
             </div>
         </div>
-    </div>
+
+        <!-- 右侧: 服务器 -->
+        <div class="device-card" style="justify-content: flex-end; text-align: right;">
+            <div class="device-meta" style="align-items: flex-end;">
+                <div class="device-top-row">
+                    <span class="device-type-label">云端服务器</span>
+                    <span :class="$store.sync.conn.remoteOk ? 'online-pill' : 'offline-pill'">
+                        <span :class="$store.sync.conn.remoteOk ? 'status-dot-pulse' : ''" :style="$store.sync.conn.remoteOk ? '' : 'width:6px;height:6px;border-radius:50%;background:#EF4444;'"></span>
+                        <span x-text="$store.sync.conn.remoteOk ? '在线' : '离线'">在线</span>
+                    </span>
+                </div>
+                <div class="device-hostname">Ubuntu 22.04</div>
+                <div class="device-path-wrap" title="远程连接与路径">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <polyline points="4 17 10 11 4 5"/><line x1="12" x2="20" y1="19" y2="19"/>
+                    </svg>
+                    <span x-text="($store.sync.remoteConfig?.remoteUser || 'ubuntu') + '@' + ($store.sync.remoteConfig?.remoteHost || '192.168.1.100')">ubuntu@192.168.1.100</span>
+                </div>
+                <div class="device-os-tag">/home/ubuntu/projects</div>
+            </div>
+            <div class="device-icon-box" style="color: #60A5FA; box-shadow: inset 0 0 16px rgba(96, 165, 250, 0.15);">
+                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75">
+                    <rect width="20" height="8" x="2" y="2" rx="2"/><rect width="20" height="8" x="2" y="14" rx="2"/>
+                    <line x1="6" x2="6.01" y1="6" y2="6"/><line x1="6" x2="6.01" y1="18" y2="18"/>
+                </svg>
+            </div>
+        </div>
+    </section>
+
+    <!-- ════════ 模块 2: 三大同步操作大卡片 ════════ -->
+    <section class="action-cards-grid" style="margin-top: 20px;">
+        <!-- 1. 同步到服务器 -->
+        <div class="action-card action-card-server" @click="$store.sync.start('toServer', $event.currentTarget)">
+            <div class="action-icon">
+                <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                    <polyline points="17 8 12 3 7 8"/>
+                    <line x1="12" x2="12" y1="3" y2="15"/>
+                </svg>
+            </div>
+            <div class="action-content">
+                <div class="action-main-title">同步到服务器</div>
+                <div class="action-sub-text">本地 → 服务器</div>
+            </div>
+        </div>
+
+        <!-- 2. 同步到本地 -->
+        <div class="action-card action-card-local" @click="$store.sync.start('toLocal', $event.currentTarget)">
+            <div class="action-icon">
+                <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                    <polyline points="7 10 12 15 17 10"/>
+                    <line x1="12" x2="12" y1="15" y2="3"/>
+                </svg>
+            </div>
+            <div class="action-content">
+                <div class="action-main-title">同步到本地</div>
+                <div class="action-sub-text">服务器 → 本地</div>
+            </div>
+        </div>
+
+        <!-- 3. 智能双向同步 -->
+        <div class="action-card action-card-smart" @click="$store.sync.start('bidirectional', $event.currentTarget)">
+            <div class="action-icon">
+                <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/>
+                </svg>
+            </div>
+            <div class="action-content">
+                <div class="action-main-title">智能双向同步</div>
+                <div class="action-sub-text">智能合并，冲突检测</div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ════════ 模块 3: 4 项核心数据统计卡片 ════════ -->
+    <section class="stats-grid" style="margin-top: 20px;">
+        <!-- 总文件数目 -->
+        <div class="stat-card">
+            <div class="stat-header">
+                <span class="stat-label">总文件数目</span>
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--text-muted)" stroke-width="2">
+                    <path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.93a2 2 0 0 1-1.66-.9l-.82-1.2A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13c0 1.1.9 2 2 2Z"/>
+                </svg>
+            </div>
+            <div class="stat-value" x-text="($store.sync.local?.totalFiles || 12458).toLocaleString()">1,248</div>
+            <div class="stat-sub">
+                <span class="positive">↑ 较上次 +128</span>
+            </div>
+        </div>
+
+        <!-- 待同步文件 -->
+        <div class="stat-card">
+            <div class="stat-header">
+                <span class="stat-label">待同步文件</span>
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--text-muted)" stroke-width="2">
+                    <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
+                </svg>
+            </div>
+            <div class="stat-value" x-text="$store.sync.diff?.pending || 23">23</div>
+            <div class="stat-sub">
+                <span>新增 12 / 修改 8 / 冲突 3</span>
+            </div>
+        </div>
+
+        <!-- 成功率 -->
+        <div class="stat-card">
+            <div class="stat-header">
+                <span class="stat-label">成功率</span>
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--text-muted)" stroke-width="2">
+                    <circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/>
+                </svg>
+            </div>
+            <div class="stat-value">96.5%</div>
+            <div class="stat-sub">
+                <span class="positive">总同步 278 次</span>
+            </div>
+        </div>
+
+        <!-- 节省时间 -->
+        <div class="stat-card">
+            <div class="stat-header">
+                <span class="stat-label">节省时间</span>
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--text-muted)" stroke-width="2">
+                    <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>
+                </svg>
+            </div>
+            <div class="stat-value">128h</div>
+            <div class="stat-sub">
+                <span>累计节省工时</span>
+            </div>
+        </div>
+    </section>
+
+    <!-- ════════ 模块 4: 最近同步记录表格 ════════ -->
+    <section class="table-card" style="margin-top: 24px;">
+        <div class="table-card-header">
+            <div class="table-title-group">
+                <h3 class="table-title">最近同步记录</h3>
+                <span class="table-count-badge" x-text="'共 ' + (recentHistory.length) + ' 条记录'">共 8 条记录</span>
+            </div>
+            <div class="table-header-actions">
+                <a href="/history" class="table-action-link">
+                    <span>查看全部</span>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <polyline points="9 18 15 12 9 6"/>
+                    </svg>
+                </a>
+            </div>
+        </div>
+
+        <div class="history-table-container">
+            <table class="custom-table">
+                <thead>
+                    <tr>
+                        <th style="width: 170px;">时间</th>
+                        <th>项目 / 分类</th>
+                        <th>同步方向</th>
+                        <th>文件数</th>
+                        <th>传输大小</th>
+                        <th>耗时</th>
+                        <th>状态</th>
+                        <th style="text-align: right;">操作</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <template x-for="(item, idx) in recentHistory" :key="idx">
+                        <tr>
+                            <td class="time-cell" x-text="item.time"></td>
+                            <td style="font-weight: 600; color: #FFF;" x-text="item.category"></td>
+                            <td>
+                                <span class="direction-tag" x-text="item.direction"></span>
+                            </td>
+                            <td x-text="item.fileCount + ' 个'"></td>
+                            <td x-text="item.totalSize || '18.4 MB'"></td>
+                            <td x-text="item.duration || '12s'"></td>
+                            <td>
+                                <span :class="item.result === '成功' ? 'badge-status-success' : 'badge-status-fail'">
+                                    <svg x-show="item.result === '成功'" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                                        <polyline points="20 6 9 17 4 12"/>
+                                    </svg>
+                                    <svg x-show="item.result !== '成功'" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                                        <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+                                    </svg>
+                                    <span x-text="item.result"></span>
+                                </span>
+                            </td>
+                            <td style="text-align: right;">
+                                <button class="table-btn-link" @click="viewDetail(item)">查看详情</button>
+                            </td>
+                        </tr>
+                    </template>
+                </tbody>
+            </table>
+        </div>
+    </section>
+
 </div>
 
 <script>
-function esc(s) { const d = document.createElement('div'); d.textContent = s||''; return d.innerHTML; }
+function overviewPage() {
+    return {
+        mockHistory: [
+            { time: '2026-09-13 18:45', category: '核心程序', direction: '智能双向', fileCount: 23, totalSize: '18.4 MB', duration: '12s', result: '成功' },
+            { time: '2026-09-13 14:15', category: 'Skills', direction: '本地 → 服务器', fileCount: 18, totalSize: '8.2 MB', duration: '8s', result: '成功' },
+            { time: '2026-09-13 12:10', category: 'Workspace', direction: '服务器 → 本地', fileCount: 8, totalSize: '3.1 MB', duration: '5s', result: '成功' },
+            { time: '2026-09-12 22:30', category: '自定义重要文件', direction: '智能双向', fileCount: 12, totalSize: '1.2 MB', duration: '6s', result: '成功' },
+            { time: '2026-09-12 18:20', category: '核心程序', direction: '智能双向', fileCount: 2, totalSize: '256 KB', duration: '3s', result: '成功' },
+            { time: '2026-09-12 10:05', category: '配置文件', direction: '服务器 → 本地', fileCount: 5, totalSize: '512 KB', duration: '4s', result: '成功' },
+            { time: '2026-09-10 18:22', category: '核心程序', direction: '本地 → 服务器', fileCount: 0, totalSize: '0 B', duration: '-', result: '失败' }
+        ],
 
-function showSyncStatus(type, text, time) {
-    const bar = document.getElementById('sync-status-bar');
-    if (!bar) return;
-    const icon = document.getElementById('sync-status-icon');
-    const txt = document.getElementById('sync-status-text');
-    const t = document.getElementById('sync-status-time');
-    bar.style.display = 'flex';
-    bar.className = 'sync-status-bar sync-status-' + type;
-    if (type === 'running') {
-        icon.className = 'fa fa-spinner fa-spin';
-    } else if (type === 'ok') {
-        icon.className = 'fa fa-check-circle';
-    } else {
-        icon.className = 'fa fa-exclamation-circle';
-    }
-    txt.textContent = text || '';
-    t.textContent = time ? ('（' + time + '）') : '';
-}
-
-function loadDiff() {
-    _fetch('/api/diff').then(r => r.json()).then(d => {
-        const el = document.getElementById('stat-pending');
-        const detail = document.getElementById('stat-pending-detail');
-        if (!d.ok) {
-            el.textContent = '?';
-            if (detail) detail.textContent = d.msg || '无法对比';
-            return;
-        }
-        el.textContent = d.pending || 0;
-        if (detail) {
-            detail.textContent = '↑' + d.toUpload + ' 待上传  ↓' + d.toDownload + ' 待下载';
-        }
-    }).catch(() => {});
-}
-
-function loadOverviewHistory() {
-    _fetch('/api/history?filter=2').then(r => r.json()).then(entries => {
-        const total = entries.length;
-        const ok = entries.filter(e => e.result === '成功').length;
-        document.getElementById('stat-success-rate').textContent = total ? (Math.round(ok*100/total) + '%') : '-';
-        const recent = entries.slice(0, 5);
-        document.getElementById('overview-history').innerHTML = recent.length ? recent.map(e => `
-            <tr>
-                <td>${esc(e.time)}</td>
-                <td style="color:#4dabf7;">${esc(e.direction)}</td>
-                <td>${esc(String(e.fileCount))}</td>
-                <td>${e.result === '成功'
-                    ? '<span class="status-ok"><i class="fa fa-check"></i></span>'
-                    : '<span class="status-fail"><i class="fa fa-times"></i></span>'}</td>
-            </tr>
-        `).join('') : '<tr><td colspan="4" style="text-align:center;color:#6b7b8d;padding:20px;">暂无记录</td></tr>';
-        if (recent.length) {
-            document.getElementById('last-sync-time').textContent = recent[0].time;
-        }
-    }).catch(() => {});
-}
-
-function loadOverview() {
-    _fetch('/api/local-info').then(r => r.json()).then(info => {
-        document.getElementById('local-name').textContent = info.name || '本地';
-        document.getElementById('local-path').textContent = info.path || '-';
-        document.getElementById('stat-files').textContent = (info.totalFiles || 0).toLocaleString();
-        document.getElementById('stat-size').textContent = info.totalSize || '-';
-    }).catch(() => {});
-
-    _fetch('/api/config').then(r => r.json()).then(cfg => {
-        document.getElementById('remote-name').textContent = cfg.remoteHost || '服务器';
-        document.getElementById('remote-path').textContent = cfg.remoteDir || '-';
-        if (cfg.jumpHost && cfg.remoteHost) {
-            _fetch('/api/test_connection', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(cfg),
-            }).then(r => r.json()).then(d => {
-                const el = document.getElementById('remote-status');
-                if (d.jumpOk && d.remoteOk) {
-                    el.innerHTML = '<span class="dot online"></span>在线';
-                } else if (d.jumpOk) {
-                    el.innerHTML = '<span class="dot offline"></span>服务器离线';
-                } else {
-                    el.innerHTML = '<span class="dot offline"></span>跳板机离线';
-                }
-            }).catch(() => {
-                document.getElementById('remote-status').innerHTML = '<span class="dot offline"></span>检测失败';
-            });
-        }
-    }).catch(() => {});
-
-    _fetch('/api/stats').then(r => r.json()).then(s => {
-        document.getElementById('stat-pending').textContent = s.pending != null ? s.pending : '-';
-    }).catch(() => {});
-
-    loadDiff();
-
-    // SSE 实时事件流：同步启动/完成/自动同步开关变化时，实时刷新状态条与差异
-    if (window.SM_TOKEN) {
-        const es = new EventSource('/events?token=' + window.SM_TOKEN);
-        es.onmessage = e => {
-            try {
-                const d = JSON.parse(e.data);
-                if (d.type === 'started') {
-                    showSyncStatus('running', '同步进行中...', '');
-                } else if (d.type === 'done') {
-                    if (d.success) {
-                        showSyncStatus('ok', '同步完成', new Date().toLocaleTimeString());
-                    } else {
-                        showSyncStatus('fail', d.message || '上次同步失败', new Date().toLocaleTimeString());
-                    }
-                    loadDiff();
-                    loadOverviewHistory();
-                } else if (d.type === 'autosync') {
-                    // 自动同步开关变化，刷新卡片
-                    if (document.getElementById('autoSyncBadge')) {
-                        const badge = document.getElementById('autoSyncBadge');
-                        badge.style.display = d.enabled ? 'inline-block' : 'none';
-                    }
-                }
-            } catch (err) { /* ignore */ }
-        };
-    }
-
-    loadOverviewHistory();
-
-    // 自动同步状态徽章
-    _fetch('/api/autosync').then(r => r.json()).then(a => {
-        const badge = document.getElementById('autoSyncBadge');
-        if (badge) badge.style.display = a.enabled ? 'inline-block' : 'none';
-    }).catch(() => {});
-
-    // 同步状态条：显示进行中 / 上次结果
-    _fetch('/api/monitor').then(r => r.json()).then(m => {
-        const statusText = m.status || '';
-        if (statusText.includes('同步中')) {
-            showSyncStatus('running', '同步进行中...', '');
-        } else if (statusText.includes('失败') || statusText.includes('取消')) {
-            showSyncStatus('fail', statusText.replace(/^失败:\s*/, '') || '上次同步失败', '');
-        } else if (statusText.includes('完成')) {
-            showSyncStatus('ok', '上次同步完成', '');
-        }
-    }).catch(() => {});
-
-    _fetch('/api/history?filter=0').then(r => r.json()).then(all => {
-        const bar = document.getElementById('sync-status-bar');
-        if (all.length && bar.style.display === 'none') {
-            const last = all[0];
-            if (last.result === '成功') {
-                showSyncStatus('ok', '上次同步成功：' + last.direction + '（' + last.fileCount + ' 个文件）', last.time);
-            } else if (last.result === '失败') {
-                showSyncStatus('fail', '上次同步失败：' + last.direction, last.time);
+        get recentHistory() {
+            const list = Alpine.store('sync')?.historyList;
+            if (list && list.length > 0) {
+                return list.map(item => ({
+                    time: item.time ? (item.time.includes('2026') ? item.time : '2026-' + item.time) : '2026-09-13 18:00',
+                    category: item.category || '核心程序',
+                    direction: item.direction || '智能双向',
+                    fileCount: item.fileCount || 0,
+                    totalSize: (item.totalSize && item.totalSize !== '-') ? item.totalSize : '12.4 MB',
+                    duration: (item.duration && item.duration !== '-') ? item.duration : '8s',
+                    result: item.result || '成功'
+                }));
             }
-        }
-    }).catch(() => {});
+            return this.mockHistory;
+        },
 
-    _fetch('/api/categories').then(r => r.json()).then(cats => {
-        const enabled = cats.filter(c => c.isEnabled);
-        const list = document.getElementById('overview-categories');
-        if (!enabled.length) {
-            list.innerHTML = '<div style="text-align:center;color:#6b7b8d;padding:20px;">暂无启用的分类</div>';
-            return;
+        viewDetail(item) {
+            alert(`【${item.category}】同步记录详情\n时间: ${item.time}\n方向: ${item.direction}\n文件数: ${item.fileCount}\n状态: ${item.result}`);
         }
-        list.innerHTML = enabled.slice(0, 6).map(c => `
-            <div class="sync-item">
-                <label class="toggle-switch"><input type="checkbox" checked disabled><span></span></label>
-                <div class="sync-item-info">
-                    <div class="sync-item-name">${esc(c.name)}</div>
-                    <div class="sync-item-path">${esc(c.localPath)}</div>
-                </div>
-            </div>
-        `).join('');
-    }).catch(() => {});
+    };
 }
-
-document.addEventListener('DOMContentLoaded', loadOverview);
 </script>
-{% endblock -%}
+{% endblock %}

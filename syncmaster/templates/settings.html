@@ -1,6 +1,7 @@
 {%- extends "base.html" -%}
 {%- block title -%}设置 | SyncMaster{% endblock -%}
 {%- block content -%}
+<div x-data="settingsPage()" x-init="load()">
 <div class="page-header">
     <div>
         <h1>设置</h1>
@@ -10,44 +11,50 @@
 
 <!-- 服务器与系统设置 -->
 <div class="card">
-    <div class="card-header">
-        <h3>服务器与系统设置</h3>
-    </div>
+    <div class="card-header"><h3>服务器与系统设置</h3></div>
     <div class="card-body">
         <div class="form-grid">
+            <div class="toggle-row" style="margin-bottom:12px;">
+                <div class="toggle-row-info">
+                    <div class="toggle-row-title">使用跳板机</div>
+                    <div class="toggle-row-desc">关闭时直接连接远程服务器（需服务器有公网 IP）</div>
+                </div>
+                <label class="toggle-switch"><input type="checkbox" :checked="cfg.useJumpHost !== '0'" @change="cfg.useJumpHost = $event.target.checked ? '1' : '0'"><span></span></label>
+            </div>
+            <template x-if="cfg.useJumpHost !== '0'">
             <div class="form-row">
                 <label class="form-label">跳板机 (user@host)</label>
-                <input type="text" class="form-input" id="jumpHost" placeholder="user@jump-host">
+                <input type="text" class="form-input" x-model="cfg.jumpHost" placeholder="user@jump-host">
             </div>
             <div class="form-row">
                 <label class="form-label">跳板机密钥路径</label>
-                <input type="text" class="form-input pick-input" id="jumpKey" placeholder="/path/to/jump_key.pem" onclick="pickPath('jumpKey','file')">
+                <input type="text" class="form-input pick-input" x-model="cfg.jumpKey" placeholder="/path/to/jump_key.pem" @focus="$el.style.cursor='text'" @click="pickPath('jumpKey','file')">
             </div>
+            </template>
             <div class="form-row">
                 <label class="form-label">服务器用户</label>
-                <input type="text" class="form-input" id="remoteUser" placeholder="remote_user">
+                <input type="text" class="form-input" x-model="cfg.remoteUser" placeholder="remote_user">
             </div>
             <div class="form-row">
                 <label class="form-label">服务器地址</label>
-                <input type="text" class="form-input" id="remoteHost" placeholder="remote.host.ip">
+                <input type="text" class="form-input" x-model="cfg.remoteHost" placeholder="remote.host.ip">
             </div>
             <div class="form-row">
                 <label class="form-label">服务器密钥路径（本机）</label>
-                <input type="text" class="form-input pick-input" id="remoteKey" placeholder="/path/to/remote_key.pem" onclick="pickPath('remoteKey','file')">
-            </div>
-            <div class="form-row">
-                <label class="form-label">服务器目录</label>
-                <input type="text" class="form-input" id="remoteDir" placeholder="/path/on/remote">
-            </div>
-            <div class="form-row">
-                <label class="form-label">本地目录</label>
-                <input type="text" class="form-input pick-input" id="localDir" placeholder="/path/on/local" onclick="pickPath('localDir','dir')">
+                <input type="text" class="form-input pick-input" x-model="cfg.remoteKey" placeholder="/path/to/remote_key.pem" @focus="$el.style.cursor='text'" @click="pickPath('remoteKey','file')">
             </div>
         </div>
         <div class="form-actions" style="margin-top: 20px;">
-            <span id="connStatus" class="conn-status"></span>
-            <button class="btn btn-outline" id="btnTestConn" onclick="testConnection()"><i class="fa fa-plug"></i> 测试连接</button>
-            <button class="btn btn-primary" id="btnSaveCfg" onclick="saveConfig()"><i class="fa fa-save"></i> 保存配置</button>
+            <template x-if="connText">
+                <span class="conn-status" :class="connClass" x-text="connText" x-transition></span>
+            </template>
+            <button class="btn btn-outline" :disabled="connTesting" @click="testConn()">
+                <i class="fa" :class="connTesting ? 'fa-spinner fa-spin' : 'fa-plug'"></i> 测试连接
+            </button>
+            <button class="btn btn-primary" :disabled="saving" @click="saveConfig()">
+                <i class="fa" :class="saving ? 'fa-spinner fa-spin' : (saved ? 'fa-check' : 'fa-save')"></i>
+                <span x-text="saving ? '保存中...' : (saved ? '已保存' : '保存配置')"></span>
+            </button>
         </div>
     </div>
 </div>
@@ -56,7 +63,7 @@
 <div class="card">
     <div class="card-header">
         <h3>自动持续同步</h3>
-        <span style="font-size:11px;color:#4dabf7;">参考 Syncthing 持续同步理念</span>
+        <span style="font-size:11px;color:var(--info);">参考 Syncthing 持续同步理念</span>
     </div>
     <div class="card-body">
         <div class="toggle-row">
@@ -64,17 +71,55 @@
                 <div class="toggle-row-title">启用自动持续同步</div>
                 <div class="toggle-row-desc">本地目录文件发生变化时自动同步到服务器，无需手动点击</div>
             </div>
-            <label class="toggle-switch"><input type="checkbox" id="autoSyncToggle" onchange="setAutoSync(this.checked)"><span></span></label>
+            <label class="toggle-switch"><input type="checkbox" :checked="$store.sync.autosync.enabled" @change="setAutoSync($event.target.checked)"><span></span></label>
         </div>
         <div class="form-row" style="margin-top:14px;">
             <label class="form-label">同步方向</label>
-            <select class="form-select" id="autoSyncDir" onchange="setAutoSyncDirection(this.value)" style="max-width:220px;">
+            <select class="form-select" x-model="autoDirection" @change="setAutoDirection($event.target.value)" style="max-width:220px;" :disabled="dirSaving">
                 <option value="push">本地 → 远程</option>
                 <option value="pull">远程 → 本地</option>
                 <option value="bidirectional">双向同步</option>
             </select>
         </div>
-        <div id="autoSyncStatus" style="font-size:12px;color:#6b7b8d;margin-top:12px;line-height:1.6;"></div>
+        <div style="font-size:12px;color:var(--text-4);margin-top:12px;line-height:1.6;">
+            <template x-if="$store.sync.autosync.enabled">
+                <span>
+                    <span style="color:var(--success);">● 已开启</span> · 方向：<span x-text="dirLabel"></span> · 模式：<span x-text="$store.sync.autosync.mode === 'poll' ? '实时轮询监听' : $store.sync.autosync.mode"></span>
+                    <template x-if="$store.sync.autosync.lastSyncAt > 0"><span> · 上次自动同步：<span x-text="new Date($store.sync.autosync.lastSyncAt * 1000).toLocaleTimeString()"></span></span></template>
+                    <template x-if="$store.sync.autosync.reason"><span style="color:var(--danger);"> · 最近失败：<span x-text="$store.sync.autosync.reason"></span>（将自动重试）</span></template>
+                </span>
+            </template>
+            <template x-if="!$store.sync.autosync.enabled">
+                <span>开启后，本地文件变化将按所选方向自动同步到服务器</span>
+            </template>
+        </div>
+    </div>
+</div>
+
+<!-- 备份设置 -->
+<div class="card">
+    <div class="card-header"><h3>备份设置</h3></div>
+    <div class="card-body">
+        <div class="toggle-row">
+            <div class="toggle-row-info">
+                <div class="toggle-row-title">同步前创建备份快照</div>
+                <div class="toggle-row-desc">每次同步前对本地目录做完整备份，存放于 ~/.syncmaster/backups/</div>
+            </div>
+            <label class="toggle-switch"><input type="checkbox" :checked="cfg.backupEnabled === '1'" @change="cfg.backupEnabled = $event.target.checked ? '1' : '0'; saveBackup()"><span></span></label>
+        </div>
+        <div class="form-row" style="margin-top:14px;">
+            <label class="form-label">备份保留天数（同步后自动清理超过此天数的旧快照）</label>
+            <select class="form-select" x-model="cfg.backupRetainDays" @change="saveBackup()" style="max-width:220px;">
+                <option value="3">3 天</option>
+                <option value="7">7 天</option>
+                <option value="14">14 天</option>
+                <option value="30">30 天</option>
+                <option value="0">永久保留（不自动清理）</option>
+            </select>
+        </div>
+        <div style="font-size:12px;color:var(--text-4);margin-top:10px;">
+            <span x-text="cfg.backupEnabled === '1' ? '● 已开启备份' : '○ 备份已关闭'"></span> · 保留：<span x-text="cfg.backupRetainDays === '0' ? '永久' : cfg.backupRetainDays + ' 天'"></span>
+        </div>
     </div>
 </div>
 
@@ -82,7 +127,7 @@
 <div class="card">
     <div class="card-header">
         <h3>.env 环境变量同步策略</h3>
-        <span style="font-size:11px;color:#6b7b8d;">（开发中）</span>
+        <span style="font-size:11px;color:var(--text-4);">（开发中）</span>
     </div>
     <div class="card-body">
         <div class="toggle-row">
@@ -97,46 +142,120 @@
 
 <!-- .syncignore 规则编辑器 -->
 <div class="card">
-    <div class="card-header">
-        <h3>.syncignore 规则编辑器</h3>
-    </div>
+    <div class="card-header"><h3>.syncignore 规则编辑器</h3></div>
     <div class="card-body">
-        <div style="font-size: 11px; color: #6b7b8d; margin-bottom: 10px;">
+        <div style="font-size: 11px; color: var(--text-4); margin-bottom: 10px;">
             每行一条规则，支持通配符 *。目录加 / 结尾
         </div>
         <div class="code-editor">
-            <textarea class="form-textarea" id="syncignoreEditor" spellcheck="false" style="min-height:200px;"></textarea>
+            <textarea class="form-textarea" x-model="syncignore" spellcheck="false" style="min-height:200px;"></textarea>
         </div>
         <div class="form-actions" style="margin-top: 16px;">
-            <button class="btn btn-primary" id="btnSaveIgnore" onclick="saveIgnoreRules()"><i class="fa fa-save"></i> 保存规则</button>
+            <button class="btn btn-primary" :disabled="savingIgnore" @click="saveIgnore()">
+                <i class="fa" :class="savingIgnore ? 'fa-spinner fa-spin' : (savedIgnore ? 'fa-check' : 'fa-save')"></i>
+                <span x-text="savingIgnore ? '保存中...' : (savedIgnore ? '已保存' : '保存规则')"></span>
+            </button>
         </div>
     </div>
 </div>
+</div>
 
 <style>
-code {
-    font-family: "SF Mono", Menlo, monospace;
-    font-size: 11px;
-    background: rgba(0, 120, 212, 0.1);
-    color: #4dabf7;
-    padding: 2px 6px;
-    border-radius: 3px;
-}
 .conn-status {
-    display: inline-flex;
-    align-items: center;
-    font-size: 12px;
-    font-weight: 600;
-    padding: 4px 10px;
-    border-radius: 6px;
-    min-height: 28px;
-    transition: all .15s ease;
+    display: inline-flex; align-items: center; font-size: 12px; font-weight: 600;
+    padding: 4px 10px; border-radius: 6px; min-height: 28px; transition: all .15s ease;
 }
-.conn-status.idle { color: #6b7b8d; background: rgba(107,123,141,.12); }
-.conn-status.testing { color: #d6a200; background: rgba(214,162,0,.12); }
-.conn-status.ok { color: #1ca672; background: rgba(28,166,114,.14); }
-.conn-status.err { color: #e5484d; background: rgba(229,72,77,.12); }
+.conn-status.idle { color: var(--text-4); background: rgba(107,123,141,.12); }
+.conn-status.testing { color: var(--warning); background: rgba(214,162,0,.12); }
+.conn-status.ok { color: var(--success); background: rgba(28,166,114,.14); }
+.conn-status.err { color: var(--danger); background: rgba(229,72,77,.12); }
 .pick-input { cursor: pointer; }
 .pick-input:focus { cursor: text; }
 </style>
+<script>
+function settingsPage() {
+    return {
+        cfg: { jumpHost:'', jumpKey:'', remoteUser:'', remoteHost:'', remoteKey:'', backupEnabled:'1', backupRetainDays:'7', useJumpHost:'1' },
+        connClass: 'idle', connText: '', connTesting: false,
+        saving: false, saved: false,
+        autoDirection: 'bidirectional', dirSaving: false,
+        syncignore: '', savingIgnore: false, savedIgnore: false,
+        get dirLabel() {
+            const d = this.autoDirection;
+            return d === 'push' ? '本地 → 远程' : d === 'pull' ? '远程 → 本地' : '双向同步';
+        },
+        load() {
+            _fetch('/api/config').then(r => r.json()).then(c => {
+                if (c.backupEnabled === undefined) c.backupEnabled = '1';
+                if (!c.backupRetainDays) c.backupRetainDays = '7';
+                if (c.useJumpHost === undefined) c.useJumpHost = '1';
+                this.cfg = c;
+            }).catch(() => {});
+            _fetch('/api/syncignore').then(r => r.json()).then(d => { if (d.ok && d.rules) this.syncignore = d.rules.join('\n'); }).catch(() => {});
+            this.autoDirection = this.$store.sync.autosync.direction || 'bidirectional';
+            this.$watch('$store.sync.autosync.direction', (v) => { if (v) this.autoDirection = v; });
+        },
+        testConn() {
+            if (!this.cfg.remoteHost) { this.connClass = 'err'; this.connText = '请先填服务器地址'; this._autoClearConn(); return; }
+            this.connClass = 'testing'; this.connText = '连接中…'; this.connTesting = true;
+            _fetch('/api/test_connection', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(this.cfg) })
+                .then(r => r.json()).then(d => {
+                    if (d.jumpOk && d.remoteOk) { this.connClass = 'ok'; this.connText = '✓ 跳板机 & 服务器 均连通'; }
+                    else if (d.jumpOk) { this.connClass = 'err'; this.connText = '✓ 跳板机通 / ✗ 服务器:' + (d.remoteMsg || '失败'); }
+                    else { this.connClass = 'err'; this.connText = '✗ 跳板机:' + (d.jumpMsg || '失败'); }
+                    this._autoClearConn();
+                }).catch(() => { this.connClass = 'err'; this.connText = '请求失败，服务未响应'; this._autoClearConn(); })
+                .finally(() => { this.connTesting = false; });
+        },
+        _autoClearConn() {
+            clearTimeout(this._connTimer);
+            this._connTimer = setTimeout(() => { this.connText = ''; this.connClass = 'idle'; }, 5000);
+        },
+        saveConfig() {
+            this.saving = true; this.saved = false;
+            _fetch('/api/config/save', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(this.cfg) })
+                .then(r => r.json()).then(d => {
+                    if (d.ok) { this.saved = true; setTimeout(() => { this.saved = false; }, 2000); }
+                    else alert(d.message || '保存失败');
+                }).catch(() => alert('请求失败，服务未响应'))
+                .finally(() => { this.saving = false; });
+        },
+        saveBackup() {
+            _fetch('/api/config/save', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ backupEnabled: this.cfg.backupEnabled, backupRetainDays: this.cfg.backupRetainDays }) })
+                .then(r => r.json()).catch(() => {});
+        },
+        setAutoSync(enabled) {
+            const dir = this.autoDirection;
+            _fetch('/api/autosync/toggle?enabled=' + (enabled ? 1 : 0) + '&direction=' + dir, { method: 'POST' })
+                .then(r => r.json()).then(d => {
+                    if (!d.ok) { alert(d.message || '切换失败'); this.$store.sync.refresh(); }
+                }).catch(() => alert('请求失败，服务未响应'));
+        },
+        setAutoDirection(direction) {
+            this.dirSaving = true;
+            _fetch('/api/autosync/direction?direction=' + direction, { method: 'POST' })
+                .then(r => r.json()).then(d => {
+                    if (!d.ok) { alert(d.message || '切换方向失败'); this.autoDirection = this.$store.sync.autosync.direction; }
+                }).catch(() => alert('请求失败，服务未响应'))
+                .finally(() => { this.dirSaving = false; });
+        },
+        saveIgnore() {
+            const rules = this.syncignore.split('\n').map(s => s.trim()).filter(s => s);
+            this.savingIgnore = true; this.savedIgnore = false;
+            _fetch('/api/syncignore/save', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ rules }) })
+                .then(r => r.json()).then(d => {
+                    if (d.ok) { this.savedIgnore = true; setTimeout(() => { this.savedIgnore = false; }, 2000); }
+                    else alert(d.message || '保存失败');
+                }).catch(() => alert('请求失败'))
+                .finally(() => { this.savingIgnore = false; });
+        },
+        pickPath(id, kind) {
+            const el = document.querySelector(`[x-model*="${id}"]`) || document.getElementById(id);
+            _fetch('/api/pick_path', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ kind: kind === 'dir' ? 'directory' : 'file' }) })
+                .then(r => r.json()).then(data => { if (data.ok && data.path) this.cfg[id] = data.path; })
+                .catch(() => {});
+        },
+    };
+}
+</script>
 {% endblock -%}
