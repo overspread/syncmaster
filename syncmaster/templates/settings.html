@@ -1,0 +1,819 @@
+{%- extends "base.html" -%}
+{%- block title -%}系统设置 | SyncMaster 智能同步中心{% endblock -%}
+{%- block content -%}
+<div x-data="settingsPage()" x-init="load()" class="settings-page">
+
+    <!-- ════════ 顶部标题栏 ════════ -->
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
+        <div>
+            <div style="font-size: 13px; color: var(--text-secondary); margin-bottom: 2px;">偏好设置</div>
+            <div style="font-size: 12px; color: var(--text-muted);">配置远程服务器连接、自动化持续同步与备份策略</div>
+        </div>
+        <div style="display: flex; align-items: center; gap: 8px;">
+            <div class="settings-sync-badge">
+                <span class="status-indicator online"></span>
+                <span>实时配置生效</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- ════════ 1. 服务器与系统设置 ════════ -->
+    <div class="settings-card">
+        <div class="settings-card-header">
+            <div class="settings-card-title-wrap">
+                <div class="settings-card-icon" style="background: rgba(59, 130, 246, 0.15); color: #60A5FA;">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <rect width="20" height="8" x="2" y="2" rx="2"/><rect width="20" height="8" x="2" y="14" rx="2"/>
+                        <line x1="6" x2="6.01" y1="6" y2="6"/><line x1="6" x2="6.01" y1="18" y2="18"/>
+                    </svg>
+                </div>
+                <div>
+                    <h3 class="settings-card-title">服务器与 SSH 连接设置</h3>
+                    <p class="settings-card-desc">配置跳板机与远程目标服务器的 SSH 认证凭据及网络链路</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="settings-card-body">
+            <!-- 跳板机开关行 -->
+            <div class="settings-row-toggle">
+                <div class="settings-row-info">
+                    <div class="settings-row-title">使用跳板机 (Bastion / Jump Host)</div>
+                    <div class="settings-row-desc">关闭时直接连接远程服务器（需服务器拥有公网 IP 或同一内网）</div>
+                </div>
+                <label class="toggle-switch-sm">
+                    <input type="checkbox" :checked="cfg.useJumpHost !== '0'" @change="cfg.useJumpHost = $event.target.checked ? '1' : '0'">
+                    <span class="toggle-slider"></span>
+                </label>
+            </div>
+
+            <!-- 跳板机配置项 (折叠展示) -->
+            <template x-if="cfg.useJumpHost !== '0'">
+                <div class="settings-sub-section">
+                    <div class="settings-form-grid">
+                        <div class="sm-form-group">
+                            <label class="sm-form-label">跳板机地址 (user@host)</label>
+                            <input type="text" class="sm-form-input" x-model="cfg.jumpHost" placeholder="e.g. root@jump.example.com">
+                        </div>
+                        <div class="sm-form-group">
+                            <label class="sm-form-label">跳板机密钥路径 (本地 PEM / id_rsa)</label>
+                            <div class="sm-input-with-btn">
+                                <input type="text" class="sm-form-input" x-model="cfg.jumpKey" placeholder="/Users/username/.ssh/id_rsa">
+                                <button type="button" class="sm-input-btn" @click="pickPath('jumpKey', 'file')" title="选择密钥文件">
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.93a2 2 0 0 1-1.66-.9l-.82-1.2A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13c0 1.1.9 2 2 2Z"/>
+                                    </svg>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </template>
+
+            <!-- 目标服务器配置项 -->
+            <div class="settings-form-grid" style="margin-top: 16px;">
+                <div class="sm-form-group">
+                    <label class="sm-form-label">服务器登录用户</label>
+                    <input type="text" class="sm-form-input" x-model="cfg.remoteUser" placeholder="e.g. ubuntu, root">
+                </div>
+                <div class="sm-form-group">
+                    <label class="sm-form-label">目标服务器地址 (IP / 域名)</label>
+                    <input type="text" class="sm-form-input" x-model="cfg.remoteHost" placeholder="e.g. 192.168.1.100 或 server.internal">
+                </div>
+            </div>
+
+            <div class="sm-form-group" style="margin-top: 14px;">
+                <label class="sm-form-label">服务器认证密钥路径（本机路径）</label>
+                <div class="sm-input-with-btn">
+                    <input type="text" class="sm-form-input" x-model="cfg.remoteKey" placeholder="/Users/username/.ssh/server_key.pem">
+                    <button type="button" class="sm-input-btn" @click="pickPath('remoteKey', 'file')" title="选择密钥文件">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.93a2 2 0 0 1-1.66-.9l-.82-1.2A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13c0 1.1.9 2 2 2Z"/>
+                        </svg>
+                    </button>
+                </div>
+            </div>
+
+            <!-- 操作按钮与测试连接反馈 -->
+            <div class="settings-actions-bar">
+                <div class="settings-status-feedback">
+                    <template x-if="connText">
+                        <div class="conn-status-pill" :class="'conn-' + connClass" x-transition>
+                            <span class="conn-status-dot"></span>
+                            <span x-text="connText"></span>
+                        </div>
+                    </template>
+                </div>
+                <div style="display: flex; align-items: center; gap: 10px;">
+                    <button class="btn-pill-outline" :disabled="connTesting" @click="testConn()">
+                        <template x-if="connTesting">
+                            <svg class="anim-spin" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <circle cx="12" cy="12" r="10" stroke-opacity="0.25"/>
+                                <path d="M12 2a10 10 0 0 1 10 10" stroke-linecap="round"/>
+                            </svg>
+                        </template>
+                        <template x-if="!connTesting">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/>
+                            </svg>
+                        </template>
+                        <span x-text="connTesting ? '连接测试中…' : '测试网络连接'"></span>
+                    </button>
+
+                    <button class="btn-pill-primary" :disabled="saving" @click="saveConfig()">
+                        <template x-if="saving">
+                            <svg class="anim-spin" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <circle cx="12" cy="12" r="10" stroke-opacity="0.25"/>
+                                <path d="M12 2a10 10 0 0 1 10 10" stroke-linecap="round"/>
+                            </svg>
+                        </template>
+                        <template x-if="!saving && !saved">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/>
+                            </svg>
+                        </template>
+                        <template x-if="saved">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#34D399" stroke-width="2.5">
+                                <polyline points="20 6 9 17 4 12"/>
+                            </svg>
+                        </template>
+                        <span x-text="saving ? '正在保存...' : (saved ? '已成功保存' : '保存服务器配置')"></span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ════════ 2. 自动持续同步 ════════ -->
+    <div class="settings-card">
+        <div class="settings-card-header">
+            <div class="settings-card-title-wrap">
+                <div class="settings-card-icon" style="background: rgba(16, 185, 129, 0.15); color: #34D399;">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/>
+                        <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
+                    </svg>
+                </div>
+                <div>
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                        <h3 class="settings-card-title">自动持续同步</h3>
+                        <span class="settings-tag-badge tag-syncthing">Syncthing 引擎理念</span>
+                    </div>
+                    <p class="settings-card-desc">当检测到本地文件变动时自动触发增量同步，无需人工介入</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="settings-card-body">
+            <div class="settings-row-toggle">
+                <div class="settings-row-info">
+                    <div class="settings-row-title">启用后台持续同步监听</div>
+                    <div class="settings-row-desc">后台实时监视开启的分类目录，触发高效率防抖增量传输</div>
+                </div>
+                <label class="toggle-switch-sm">
+                    <input type="checkbox" :checked="$store.sync.autosync.enabled" @change="setAutoSync($event.target.checked)">
+                    <span class="toggle-slider"></span>
+                </label>
+            </div>
+
+            <div class="settings-form-grid" style="margin-top: 16px;">
+                <div class="sm-form-group">
+                    <label class="sm-form-label">持续同步传输方向</label>
+                    <select class="sm-form-select" x-model="autoDirection" @change="setAutoDirection($event.target.value)" :disabled="dirSaving">
+                        <option value="push">本地 → 远程 (Push)</option>
+                        <option value="pull">远程 → 本地 (Pull)</option>
+                        <option value="bidirectional">双向智能同步 (Bidirectional)</option>
+                    </select>
+                </div>
+                <div class="sm-form-group">
+                    <label class="sm-form-label">监听工作状态</label>
+                    <div class="settings-status-box">
+                        <template x-if="$store.sync.autosync.enabled">
+                            <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+                                <span class="status-indicator online"></span>
+                                <span style="font-weight: 500; color: #34D399;">监听运行中</span>
+                                <span class="status-divider">·</span>
+                                <span style="color: var(--text-secondary);" x-text="dirLabel"></span>
+                                <span class="status-divider">·</span>
+                                <span style="color: var(--text-muted);" x-text="$store.sync.autosync.mode === 'poll' ? '轮询模式' : $store.sync.autosync.mode"></span>
+                                <template x-if="$store.sync.autosync.lastSyncAt > 0">
+                                    <span style="color: var(--text-muted);">
+                                        (上次: <span x-text="new Date($store.sync.autosync.lastSyncAt * 1000).toLocaleTimeString()"></span>)
+                                    </span>
+                                </template>
+                            </div>
+                        </template>
+                        <template x-if="!$store.sync.autosync.enabled">
+                            <div style="display: flex; align-items: center; gap: 8px;">
+                                <span class="status-indicator offline"></span>
+                                <span style="color: var(--text-muted);">已停用 (手动点击同步按钮生效)</span>
+                            </div>
+                        </template>
+                    </div>
+                </div>
+            </div>
+
+            <template x-if="$store.sync.autosync.reason">
+                <div class="settings-alert-box alert-error" style="margin-top: 14px;">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+                    </svg>
+                    <span>最近一次同步异常：<strong x-text="$store.sync.autosync.reason"></strong>（系统将在下一周期自动重试）</span>
+                </div>
+            </template>
+        </div>
+    </div>
+
+    <!-- ════════ 3. 备份与安全快照 ════════ -->
+    <div class="settings-card">
+        <div class="settings-card-header">
+            <div class="settings-card-title-wrap">
+                <div class="settings-card-icon" style="background: rgba(139, 92, 246, 0.15); color: #A78BFA;">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+                    </svg>
+                </div>
+                <div>
+                    <h3 class="settings-card-title">备份与快照策略</h3>
+                    <p class="settings-card-desc">在文件覆盖或批量同步执行前，自动对本地目标创建安全副本</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="settings-card-body">
+            <div class="settings-row-toggle">
+                <div class="settings-row-info">
+                    <div class="settings-row-title">同步前自动生成本地快照</div>
+                    <div class="settings-row-desc">防止误操作导致文件丢失，快照存储于 ~/.syncmaster/backups/</div>
+                </div>
+                <label class="toggle-switch-sm">
+                    <input type="checkbox" :checked="cfg.backupEnabled === '1'" @change="cfg.backupEnabled = $event.target.checked ? '1' : '0'; saveBackup()">
+                    <span class="toggle-slider"></span>
+                </label>
+            </div>
+
+            <div class="settings-form-grid" style="margin-top: 16px;">
+                <div class="sm-form-group">
+                    <label class="sm-form-label">快照保留周期（超时自动回收）</label>
+                    <select class="sm-form-select" x-model="cfg.backupRetainDays" @change="saveBackup()">
+                        <option value="3">保留 3 天（轻量空间）</option>
+                        <option value="7">保留 7 天（推荐默认）</option>
+                        <option value="14">保留 14 天（平衡）</option>
+                        <option value="30">保留 30 天（长效追踪）</option>
+                        <option value="0">永久保留（手动清理）</option>
+                    </select>
+                </div>
+                <div class="sm-form-group">
+                    <label class="sm-form-label">当前快照状态</label>
+                    <div class="settings-status-box">
+                        <span :style="'color:' + (cfg.backupEnabled === '1' ? '#34D399' : 'var(--text-muted)')" x-text="cfg.backupEnabled === '1' ? '● 快照保护生效中' : '○ 快照已停用'"></span>
+                        <span class="status-divider">·</span>
+                        <span style="color: var(--text-secondary);">存储周期：<span x-text="cfg.backupRetainDays === '0' ? '永久' : cfg.backupRetainDays + ' 天'"></span></span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ════════ 4. .env 环境变量智能保护 ════════ -->
+    <div class="settings-card">
+        <div class="settings-card-header">
+            <div class="settings-card-title-wrap">
+                <div class="settings-card-icon" style="background: rgba(245, 158, 11, 0.15); color: #FBBF24;">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+                    </svg>
+                </div>
+                <div>
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                        <h3 class="settings-card-title">.env 环境变量与凭证保护</h3>
+                        <span class="settings-tag-badge tag-dev">实验特性</span>
+                    </div>
+                    <p class="settings-card-desc">自动拦截和识别 API Key、数据库密码与机器人 Token，防止意外覆盖</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="settings-card-body">
+            <div class="settings-row-toggle">
+                <div class="settings-row-info">
+                    <div class="settings-row-title">智能差异隔离与凭证保护 (Smart .env Protection)</div>
+                    <div class="settings-row-desc">默认严格忽略本地与远程专属的环境变量文件，防止两端聊天机器人 ID 与 Token 互相覆盖</div>
+                </div>
+                <label class="toggle-switch-sm">
+                    <input type="checkbox" :checked="cfg.envProtectEnabled !== '0'" @change="cfg.envProtectEnabled = $event.target.checked ? '1' : '0'; saveBackup()">
+                    <span class="toggle-slider"></span>
+                </label>
+            </div>
+
+            <div style="margin-top: 16px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px;">
+                <div style="display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--text-secondary);">
+                    <span>保护通配符：</span>
+                    <span class="settings-tag-badge" style="background: rgba(255,255,255,0.06); color: #FFF;">.env</span>
+                    <span class="settings-tag-badge" style="background: rgba(255,255,255,0.06); color: #FFF;">.env.*</span>
+                    <span class="settings-tag-badge" style="background: rgba(59,130,246,0.15); color: #60A5FA;">*bot*.env</span>
+                </div>
+                <a href="/diff" class="btn-pill-outline" style="text-decoration: none; font-size: 11px;">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <polyline points="16 3 21 3 21 8"/><line x1="4" y1="20" x2="21" y2="3"/><polyline points="21 16 21 21 16 21"/><line x1="15" y1="15" x2="21" y2="21"/><line x1="4" y1="4" x2="9" y2="9"/>
+                    </svg>
+                    <span>前往差异对比页逐项合并</span>
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <!-- ════════ 5. .syncignore 忽略规则 ════════ -->
+    <div class="settings-card">
+        <div class="settings-card-header">
+            <div class="settings-card-title-wrap">
+                <div class="settings-card-icon" style="background: rgba(239, 68, 68, 0.15); color: #F87171;">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/>
+                    </svg>
+                </div>
+                <div>
+                    <h3 class="settings-card-title">全局忽略规则 (.syncignore)</h3>
+                    <p class="settings-card-desc">基于 Gitignore 语义规则，过滤无需传输的缓存目录、日志与临时临时文件</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="settings-card-body">
+            <div class="settings-tip-bar">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/>
+                </svg>
+                <span>语法规范：每行一条规则，支持通配符 <code>*</code>，目录以 <code>/</code> 结尾，以 <code>#</code> 开头表示注释说明</span>
+            </div>
+
+            <div class="syncignore-editor-wrap">
+                <textarea class="syncignore-textarea" x-model="syncignore" spellcheck="false" placeholder="# 忽略临时文件与构建目录&#10;node_modules/&#10;.git/&#10;*.log&#10;__pycache__/&#10;.DS_Store"></textarea>
+            </div>
+
+            <div class="settings-actions-bar" style="margin-top: 14px;">
+                <span style="font-size: 11px; color: var(--text-muted);">
+                    规则将在全部分类任务执行时全局生效
+                </span>
+                <button class="btn-pill-primary" :disabled="savingIgnore" @click="saveIgnore()">
+                    <template x-if="savingIgnore">
+                        <svg class="anim-spin" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="12" cy="12" r="10" stroke-opacity="0.25"/>
+                            <path d="M12 2a10 10 0 0 1 10 10" stroke-linecap="round"/>
+                        </svg>
+                    </template>
+                    <template x-if="!savingIgnore && !savedIgnore">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/>
+                        </svg>
+                    </template>
+                    <template x-if="savedIgnore">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#34D399" stroke-width="2.5">
+                            <polyline points="20 6 9 17 4 12"/>
+                        </svg>
+                    </template>
+                    <span x-text="savingIgnore ? '正在保存...' : (savedIgnore ? '规则已保存' : '保存忽略规则')"></span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+</div>
+
+<style>
+/* ════════ 设置页面样式 ════════ */
+.settings-page {
+    max-width: 900px;
+    padding-bottom: 40px;
+}
+
+.settings-sync-badge {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    padding: 5px 12px;
+    border-radius: var(--radius-full);
+    background: rgba(16, 185, 129, 0.1);
+    border: 1px solid rgba(16, 185, 129, 0.2);
+    font-size: 11px;
+    font-weight: 500;
+    color: #34D399;
+}
+
+/* 卡片容器 */
+.settings-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border-card);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-sm);
+    margin-bottom: 20px;
+    overflow: hidden;
+    transition: var(--transition);
+}
+.settings-card:hover {
+    border-color: rgba(255, 255, 255, 0.14);
+}
+
+.settings-card-header {
+    padding: 18px 24px;
+    border-bottom: 1px solid var(--border-subtle);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.settings-card-title-wrap {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+}
+
+.settings-card-icon {
+    width: 36px;
+    height: 36px;
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.settings-card-title {
+    font-size: 14px;
+    font-weight: 600;
+    color: #FFF;
+    margin: 0;
+    line-height: 1.3;
+}
+
+.settings-card-desc {
+    font-size: 12px;
+    color: var(--text-muted);
+    margin: 3px 0 0 0;
+}
+
+.settings-card-body {
+    padding: 22px 24px;
+}
+
+/* 标签胶囊 */
+.settings-tag-badge {
+    font-size: 10px;
+    font-weight: 600;
+    padding: 2px 7px;
+    border-radius: 4px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+.tag-syncthing {
+    background: rgba(16, 185, 129, 0.15);
+    color: #34D399;
+    border: 1px solid rgba(16, 185, 129, 0.25);
+}
+.tag-dev {
+    background: rgba(245, 158, 11, 0.15);
+    color: #FBBF24;
+    border: 1px solid rgba(245, 158, 11, 0.25);
+}
+
+/* 开关行 */
+.settings-row-toggle {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding-bottom: 16px;
+    border-bottom: 1px solid var(--border-subtle);
+}
+
+.settings-row-info {
+    flex: 1;
+    padding-right: 16px;
+}
+
+.settings-row-title {
+    font-size: 13px;
+    font-weight: 500;
+    color: #FFF;
+    margin-bottom: 2px;
+}
+
+.settings-row-desc {
+    font-size: 12px;
+    color: var(--text-muted);
+}
+
+/* 次级分组 */
+.settings-sub-section {
+    padding: 16px;
+    background: rgba(0, 0, 0, 0.2);
+    border-radius: var(--radius-sm);
+    border: 1px dashed var(--border-subtle);
+    margin-top: 16px;
+}
+
+/* 表单布局 */
+.settings-form-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 16px;
+}
+
+.sm-form-group {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.sm-form-label {
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--text-secondary);
+}
+
+.sm-form-input,
+.sm-form-select {
+    background: var(--bg-surface);
+    border: 1px solid var(--border-card);
+    border-radius: var(--radius-sm);
+    padding: 9px 12px;
+    font-size: 13px;
+    color: #FFF;
+    font-family: 'Inter', -apple-system, sans-serif;
+    outline: none;
+    transition: var(--transition);
+    width: 100%;
+}
+.sm-form-input::placeholder {
+    color: var(--text-muted);
+}
+.sm-form-input:focus,
+.sm-form-select:focus {
+    border-color: var(--brand-blue);
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
+}
+
+.sm-form-select {
+    appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2394A3B8' stroke-width='2'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 10px center;
+    padding-right: 32px;
+}
+
+/* 带按钮的输入框 */
+.sm-input-with-btn {
+    display: flex;
+    align-items: center;
+    position: relative;
+}
+.sm-input-with-btn .sm-form-input {
+    padding-right: 42px;
+}
+.sm-input-btn {
+    position: absolute;
+    right: 6px;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid var(--border-subtle);
+    border-radius: 4px;
+    color: var(--text-secondary);
+    padding: 5px 8px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: var(--transition);
+}
+.sm-input-btn:hover {
+    background: rgba(255, 255, 255, 0.12);
+    color: #FFF;
+}
+
+/* 状态展示盒子 */
+.settings-status-box {
+    background: var(--bg-surface);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-sm);
+    padding: 9px 12px;
+    font-size: 12px;
+    min-height: 38px;
+    display: flex;
+    align-items: center;
+}
+.status-divider {
+    color: var(--text-muted);
+    margin: 0 4px;
+}
+
+/* 提示与警告条 */
+.settings-alert-box {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 14px;
+    border-radius: var(--radius-sm);
+    font-size: 12px;
+}
+.alert-error {
+    background: rgba(239, 68, 68, 0.12);
+    border: 1px solid rgba(239, 68, 68, 0.25);
+    color: #FCA5A5;
+}
+
+.settings-tip-bar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-sm);
+    padding: 8px 12px;
+    font-size: 12px;
+    color: var(--text-secondary);
+    margin-bottom: 12px;
+}
+.settings-tip-bar code {
+    background: rgba(255, 255, 255, 0.08);
+    padding: 1px 4px;
+    border-radius: 3px;
+    font-family: 'SFMono-Regular', Consolas, monospace;
+    font-size: 11px;
+    color: #93C5FD;
+}
+
+/* 底部操作条 */
+.settings-actions-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-top: 20px;
+    padding-top: 16px;
+    border-top: 1px solid var(--border-subtle);
+}
+
+/* 连接状态胶囊 */
+.conn-status-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    padding: 6px 12px;
+    border-radius: var(--radius-full);
+    font-size: 12px;
+    font-weight: 500;
+    transition: all 0.2s ease;
+}
+.conn-status-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+}
+.conn-idle {
+    display: none;
+}
+.conn-testing {
+    background: rgba(245, 158, 11, 0.12);
+    border: 1px solid rgba(245, 158, 11, 0.25);
+    color: #FCD34D;
+}
+.conn-testing .conn-status-dot {
+    background: #FBBF24;
+    box-shadow: 0 0 8px rgba(245, 158, 11, 0.6);
+}
+.conn-ok {
+    background: rgba(16, 185, 129, 0.12);
+    border: 1px solid rgba(16, 185, 129, 0.25);
+    color: #6EE7B7;
+}
+.conn-ok .conn-status-dot {
+    background: #34D399;
+    box-shadow: 0 0 8px rgba(16, 185, 129, 0.6);
+}
+.conn-err {
+    background: rgba(239, 68, 68, 0.12);
+    border: 1px solid rgba(239, 68, 68, 0.25);
+    color: #FCA5A5;
+}
+.conn-err .conn-status-dot {
+    background: #F87171;
+    box-shadow: 0 0 8px rgba(239, 68, 68, 0.6);
+}
+
+/* 编辑器容器 */
+.syncignore-editor-wrap {
+    border: 1px solid var(--border-card);
+    border-radius: var(--radius-sm);
+    overflow: hidden;
+    background: #090D16;
+}
+.syncignore-textarea {
+    width: 100%;
+    min-height: 220px;
+    background: transparent;
+    border: none;
+    padding: 14px;
+    font-family: 'JetBrains Mono', 'SFMono-Regular', Consolas, monospace;
+    font-size: 12px;
+    line-height: 1.6;
+    color: #E2E8F0;
+    resize: vertical;
+    outline: none;
+}
+.syncignore-textarea:focus {
+    box-shadow: inset 0 0 0 1px var(--brand-blue);
+}
+
+/* 旋转动画 */
+.anim-spin {
+    animation: spin 1s linear infinite;
+}
+@keyframes spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}
+</style>
+
+<script>
+function settingsPage() {
+    return {
+        cfg: { jumpHost:'', jumpKey:'', remoteUser:'', remoteHost:'', remoteKey:'', backupEnabled:'1', backupRetainDays:'7', useJumpHost:'1' },
+        connClass: 'idle', connText: '', connTesting: false,
+        saving: false, saved: false,
+        autoDirection: 'bidirectional', dirSaving: false,
+        syncignore: '', savingIgnore: false, savedIgnore: false,
+        get dirLabel() {
+            const d = this.autoDirection;
+            return d === 'push' ? '本地 → 远程' : d === 'pull' ? '远程 → 本地' : '双向智能同步';
+        },
+        load() {
+            _fetch('/api/config').then(r => r.json()).then(c => {
+                if (c.backupEnabled === undefined) c.backupEnabled = '1';
+                if (!c.backupRetainDays) c.backupRetainDays = '7';
+                if (c.useJumpHost === undefined) c.useJumpHost = '1';
+                this.cfg = c;
+            }).catch(() => {});
+            _fetch('/api/syncignore').then(r => r.json()).then(d => { if (d.ok && d.rules) this.syncignore = d.rules.join('\n'); }).catch(() => {});
+            this.autoDirection = this.$store.sync.autosync.direction || 'bidirectional';
+            this.$watch('$store.sync.autosync.direction', (v) => { if (v) this.autoDirection = v; });
+        },
+        testConn() {
+            if (!this.cfg.remoteHost) { this.connClass = 'err'; this.connText = '请先填写服务器地址'; this._autoClearConn(); return; }
+            this.connClass = 'testing'; this.connText = '正在建立 SSH 连接并测试连通性...'; this.connTesting = true;
+            _fetch('/api/test_connection', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(this.cfg) })
+                .then(r => r.json()).then(d => {
+                    if (d.jumpOk && d.remoteOk) { this.connClass = 'ok'; this.connText = '✓ 跳板机 & 远程服务器均连通正常'; }
+                    else if (d.jumpOk) { this.connClass = 'err'; this.connText = '✓ 跳板机通 / ✗ 服务器: ' + (d.remoteMsg || '连接失败'); }
+                    else { this.connClass = 'err'; this.connText = '✗ 跳板机连接失败: ' + (d.jumpMsg || '未能建立连接'); }
+                    this._autoClearConn();
+                }).catch(() => { this.connClass = 'err'; this.connText = '请求失败，后端服务未响应'; this._autoClearConn(); })
+                .finally(() => { this.connTesting = false; });
+        },
+        _autoClearConn() {
+            clearTimeout(this._connTimer);
+            this._connTimer = setTimeout(() => { this.connText = ''; this.connClass = 'idle'; }, 6000);
+        },
+        saveConfig() {
+            this.saving = true; this.saved = false;
+            _fetch('/api/config/save', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(this.cfg) })
+                .then(r => r.json()).then(d => {
+                    if (d.ok) { this.saved = true; setTimeout(() => { this.saved = false; }, 2500); }
+                    else alert(d.message || '保存失败');
+                }).catch(() => alert('请求失败，后端服务未响应'))
+                .finally(() => { this.saving = false; });
+        },
+        saveBackup() {
+            _fetch('/api/config/save', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ backupEnabled: this.cfg.backupEnabled, backupRetainDays: this.cfg.backupRetainDays }) })
+                .then(r => r.json()).catch(() => {});
+        },
+        setAutoSync(enabled) {
+            const dir = this.autoDirection;
+            _fetch('/api/autosync/toggle?enabled=' + (enabled ? 1 : 0) + '&direction=' + dir, { method: 'POST' })
+                .then(r => r.json()).then(d => {
+                    if (!d.ok) { alert(d.message || '切换失败'); this.$store.sync.refresh(); }
+                }).catch(() => alert('请求失败，后端服务未响应'));
+        },
+        setAutoDirection(direction) {
+            this.dirSaving = true;
+            _fetch('/api/autosync/direction?direction=' + direction, { method: 'POST' })
+                .then(r => r.json()).then(d => {
+                    if (!d.ok) { alert(d.message || '切换方向失败'); this.autoDirection = this.$store.sync.autosync.direction; }
+                }).catch(() => alert('请求失败，后端服务未响应'))
+                .finally(() => { this.dirSaving = false; });
+        },
+        saveIgnore() {
+            const rules = this.syncignore.split('\n').map(s => s.trim()).filter(s => s);
+            this.savingIgnore = true; this.savedIgnore = false;
+            _fetch('/api/syncignore/save', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ rules }) })
+                .then(r => r.json()).then(d => {
+                    if (d.ok) { this.savedIgnore = true; setTimeout(() => { this.savedIgnore = false; }, 2500); }
+                    else alert(d.message || '保存失败');
+                }).catch(() => alert('请求失败'))
+                .finally(() => { this.savingIgnore = false; });
+        },
+        pickPath(id, kind) {
+            _fetch('/api/pick_path', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ kind: kind === 'dir' ? 'directory' : 'file' }) })
+                .then(r => r.json()).then(data => { if (data.ok && data.path) this.cfg[id] = data.path; })
+                .catch(() => {});
+        },
+    };
+}
+</script>
+{% endblock -%}

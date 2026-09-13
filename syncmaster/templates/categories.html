@@ -1,0 +1,739 @@
+{%- extends "base.html" -%}
+{%- block title -%}同步分类 | SyncMaster 智能同步中心{% endblock -%}
+{%- block content -%}
+<div x-data="categoriesPage()" x-init="load()">
+
+    <!-- ════════ 顶部标题与创建按钮 ════════ -->
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
+        <div>
+            <div style="font-size: 13px; color: var(--text-secondary); margin-bottom: 2px;">分类管理</div>
+            <div style="font-size: 12px; color: var(--text-muted);">多任务独立管理，支持不同路径、模式与规则配置</div>
+        </div>
+        <button class="btn-pill-primary" @click="openCreate()">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
+                <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+            </svg>
+            <span>创建分类</span>
+        </button>
+    </div>
+
+    <!-- ════════ 分类卡片网格 ════════ -->
+    <div class="cat-grid">
+        <template x-for="(c, i) in cats" :key="c.id">
+            <div class="cat-card" :class="{ 'cat-card-disabled': !c.isEnabled }">
+                <!-- 卡片头部: 图标 + 开关 -->
+                <div class="cat-card-head">
+                    <div class="cat-icon-circle" :style="'background:' + CAT_COLORS[i % CAT_COLORS.length].bg + '; color:' + CAT_COLORS[i % CAT_COLORS.length].fg + '; box-shadow: 0 0 16px ' + CAT_COLORS[i % CAT_COLORS.length].glow">
+                        <svg x-show="CAT_ICONS[i % CAT_ICONS.length] === 'cube'" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
+                            <polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/>
+                        </svg>
+                        <svg x-show="CAT_ICONS[i % CAT_ICONS.length] === 'puzzle'" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M19.439 7.85c-.049.322.059.648.289.878l1.568 1.568c.47.47.706 1.087.706 1.704s-.235 1.233-.706 1.704l-1.611 1.611a.98.98 0 0 1-.837.276c-.47-.07-.802-.48-.968-.925a2.501 2.501 0 1 0-3.214 3.214c.446.166.855.497.925.968a.979.979 0 0 1-.276.837l-1.61 1.61a2.404 2.404 0 0 1-1.705.707 2.402 2.402 0 0 1-1.704-.706l-1.568-1.568a1.026 1.026 0 0 0-.877-.29c-.493.074-.84.504-1.02.968a2.5 2.5 0 1 1-3.237-3.237c.464-.18.894-.527.967-1.02a1.026 1.026 0 0 0-.289-.877l-1.568-1.568A2.402 2.402 0 0 1 1.998 12c0-.617.236-1.234.706-1.704L4.23 8.77c.24-.24.581-.353.917-.303.515.077.877.528 1.073 1.01a2.5 2.5 0 1 0 3.259-3.259c-.482-.196-.933-.558-1.01-1.073-.05-.336.062-.676.303-.917l1.525-1.525A2.402 2.402 0 0 1 12 1.998c.617 0 1.234.236 1.704.706l1.568 1.568c.23.23.556.338.877.29.493-.074.84-.504 1.02-.968a2.5 2.5 0 1 1 3.237 3.237c-.464.18-.894.527-.967 1.02Z"/>
+                        </svg>
+                        <svg x-show="CAT_ICONS[i % CAT_ICONS.length] === 'folder'" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.93a2 2 0 0 1-1.66-.9l-.82-1.2A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13c0 1.1.9 2 2 2Z"/>
+                        </svg>
+                        <svg x-show="CAT_ICONS[i % CAT_ICONS.length] === 'star'" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
+                        </svg>
+                        <svg x-show="CAT_ICONS[i % CAT_ICONS.length] === 'gear'" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="12" cy="12" r="3"/>
+                            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+                        </svg>
+                        <svg x-show="CAT_ICONS[i % CAT_ICONS.length] === 'file'" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/>
+                            <polyline points="14 2 14 8 20 8"/>
+                        </svg>
+                        <svg x-show="CAT_ICONS[i % CAT_ICONS.length] === 'database'" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/>
+                        </svg>
+                        <svg x-show="CAT_ICONS[i % CAT_ICONS.length] === 'clock'" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
+                        </svg>
+                    </div>
+                    <!-- 启用/禁用开关 -->
+                    <label class="toggle-switch-sm">
+                        <input type="checkbox" :checked="c.isEnabled" @change="toggle(c.id, $event.target.checked)">
+                        <span class="toggle-slider"></span>
+                    </label>
+                </div>
+
+                <!-- 卡片内容体 -->
+                <div class="cat-card-body">
+                    <div class="cat-name" x-text="c.name"></div>
+                    <div class="cat-path-row">
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--text-muted)" stroke-width="2">
+                            <path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.93a2 2 0 0 1-1.66-.9l-.82-1.2A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13c0 1.1.9 2 2 2Z"/>
+                        </svg>
+                        <span x-text="c.localPath"></span>
+                    </div>
+                    <div class="cat-path-row">
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--text-muted)" stroke-width="2">
+                            <rect width="20" height="8" x="2" y="2" rx="2"/><rect width="20" height="8" x="2" y="14" rx="2"/>
+                            <line x1="6" x2="6.01" y1="6" y2="6"/><line x1="6" x2="6.01" y1="18" y2="18"/>
+                        </svg>
+                        <span x-text="c.remotePath"></span>
+                    </div>
+                    <div class="cat-meta-row">
+                        <span class="cat-mode-badge" :class="'mode-' + c.mode" x-text="modeText(c.mode)"></span>
+                        <span class="cat-last-sync-text">
+                            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
+                            </svg>
+                            <span x-text="c.lastSync || '-'"></span>
+                        </span>
+                    </div>
+                </div>
+
+                <!-- 卡片底部操作 -->
+                <div class="cat-card-actions">
+                    <button class="cat-action-btn cat-btn-sync" @click="sync(c)" title="全量同步此分类">
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                            <polygon points="5 3 19 12 5 21 5 3"/>
+                        </svg>
+                        <span>同步</span>
+                    </button>
+                    <button class="cat-action-btn" @click="openTree(c)" title="按需挑选单个或多个文件精准同步">
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/>
+                        </svg>
+                        <span>选文件</span>
+                    </button>
+                    <button class="cat-action-btn" @click="edit(c.id)" title="编辑配置">
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/>
+                        </svg>
+                        <span>编辑</span>
+                    </button>
+                    <button class="cat-action-btn cat-btn-danger" @click="remove(c.id, c.name)" title="删除分类">
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+                        </svg>
+                        <span>删除</span>
+                    </button>
+                </div>
+            </div>
+        </template>
+    </div>
+
+    <!-- ════════ 空状态 ════════ -->
+    <template x-if="loaded && cats.length === 0">
+        <div class="cat-empty-state">
+            <div class="cat-empty-icon">
+                <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="var(--text-muted)" stroke-width="1.5">
+                    <path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.93a2 2 0 0 1-1.66-.9l-.82-1.2A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13c0 1.1.9 2 2 2Z"/>
+                </svg>
+            </div>
+            <div class="cat-empty-title">暂无同步分类</div>
+            <div class="cat-empty-desc">创建你的第一个同步分类，实现文件的精细化管理</div>
+            <button class="btn-pill-primary" style="margin-top: 16px;" @click="openCreate()">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                    <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+                </svg>
+                <span>创建第一个分类</span>
+            </button>
+        </div>
+    </template>
+
+    <!-- ════════ 创建/编辑 弹窗 ════════ -->
+    <div class="modal-backdrop" x-show="modalOpen" x-cloak x-transition.opacity>
+        <div class="modal-panel" @click.outside="modalOpen = false" x-show="modalOpen" x-transition:enter="modal-enter" x-transition:leave="modal-leave">
+            <div class="modal-header-bar">
+                <h3 class="modal-title" x-text="editingId ? '编辑同步分类' : '创建同步分类'"></h3>
+                <button class="modal-close-btn" @click="modalOpen = false">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+                    </svg>
+                </button>
+            </div>
+            <div class="modal-body-content">
+                <div class="sm-form-group">
+                    <label class="sm-form-label">分类名称</label>
+                    <input type="text" class="sm-form-input" x-model="form.name" placeholder="如：核心程序、个人配置">
+                </div>
+                <div class="sm-form-group">
+                    <label class="sm-form-label">本地路径</label>
+                    <input type="text" class="sm-form-input" x-model="form.localPath" placeholder="/Users/you/.hermes/config.yaml">
+                </div>
+                <div class="sm-form-group">
+                    <label class="sm-form-label">服务器路径</label>
+                    <input type="text" class="sm-form-input" x-model="form.remotePath" placeholder="/home/opc/.hermes">
+                </div>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
+                    <div class="sm-form-group">
+                        <label class="sm-form-label">同步模式</label>
+                        <select class="sm-form-select" x-model="form.mode">
+                            <option value="toServer">本地 → 服务器</option>
+                            <option value="toLocal">服务器 → 本地</option>
+                            <option value="bidirectional" selected>智能双向</option>
+                        </select>
+                    </div>
+                    <div class="sm-form-group">
+                        <label class="sm-form-label">删除策略</label>
+                        <select class="sm-form-select" x-model="form.deletePolicy">
+                            <option value="noDelete" selected>不自动删除（推荐）</option>
+                            <option value="deleteToServer">本地删除 → 同步删除服务器</option>
+                            <option value="deleteToLocal">服务器删除 → 同步删除本地</option>
+                            <option value="bidirectional">双向删除同步</option>
+                            <option value="ask">发现删除时询问</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer-bar">
+                <button class="btn-pill-secondary" @click="modalOpen = false">取消</button>
+                <button class="btn-pill-primary" @click="save()">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/>
+                    </svg>
+                    <span>保存</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ════════ 精准文件选择器 弹窗 ════════ -->
+    <div class="modal-backdrop" x-show="treeModalOpen" x-cloak x-transition.opacity>
+        <div class="modal-panel" style="width: 720px; max-height: 85vh; display: flex; flex-direction: column;" @click.outside="treeModalOpen = false" x-show="treeModalOpen" x-transition:enter="modal-enter" x-transition:leave="modal-leave">
+            <div class="modal-header-bar">
+                <div>
+                    <h3 class="modal-title" x-text="'挑选文件定向同步 - ' + (treeCat ? treeCat.name : '')"></h3>
+                    <div style="font-size: 11px; color: var(--text-muted); margin-top: 2px;" x-text="treeCat ? treeCat.localPath : ''"></div>
+                </div>
+                <button class="modal-close-btn" @click="treeModalOpen = false">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+                    </svg>
+                </button>
+            </div>
+
+            <!-- 控制搜索栏与快捷操作 -->
+            <div style="padding: 12px 20px; background: rgba(0,0,0,0.18); border-bottom: 1px solid var(--border-subtle); display: flex; align-items: center; justify-content: space-between; gap: 12px;">
+                <div style="display: flex; align-items: center; gap: 8px; flex: 1;">
+                    <input type="text" class="sm-form-input" style="padding: 6px 12px; font-size: 12px;" placeholder="快速搜索文件或子目录路径..." x-model="treeSearch">
+                </div>
+                <div style="display: flex; align-items: center; gap: 8px;">
+                    <button class="btn-pill-outline" style="padding: 5px 10px; font-size: 11px;" @click="toggleTreeAll(true)">全选</button>
+                    <button class="btn-pill-outline" style="padding: 5px 10px; font-size: 11px;" @click="toggleTreeAll(false)">清空</button>
+                    <button class="btn-pill-outline" style="padding: 5px 10px; font-size: 11px;" @click="toggleTreeFilesOnly()">仅选文件</button>
+                </div>
+            </div>
+
+            <!-- 文件列表主体 -->
+            <div style="flex: 1; overflow-y: auto; padding: 12px 20px; max-height: 400px;">
+                <template x-if="treeLoading">
+                    <div style="text-align: center; padding: 40px; color: var(--text-muted); font-size: 13px;">
+                        正在读取目录文件结构...
+                    </div>
+                </template>
+                <template x-if="!treeLoading && filteredTree.length === 0">
+                    <div style="text-align: center; padding: 40px; color: var(--text-muted); font-size: 13px;">
+                        未检索到匹配的文件
+                    </div>
+                </template>
+                <div style="display: flex; flex-direction: column; gap: 2px;">
+                    <template x-for="item in filteredTree" :key="item.path">
+                        <div class="tree-item-row" :style="'padding-left:' + (item.level * 16 + 8) + 'px'">
+                            <input type="checkbox" x-model="item.checked" style="cursor: pointer;">
+                            <svg x-show="item.isDir" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#60A5FA" stroke-width="2">
+                                <path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.93a2 2 0 0 1-1.66-.9l-.82-1.2A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13c0 1.1.9 2 2 2Z"/>
+                            </svg>
+                            <svg x-show="!item.isDir" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--text-muted)" stroke-width="2">
+                                <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/>
+                            </svg>
+                            <span class="tree-item-name" :class="{ 'is-dir': item.isDir }" x-text="item.name"></span>
+                            <span style="margin-left: auto; display: flex; align-items: center; gap: 12px; font-size: 11px; color: var(--text-muted);">
+                                <span x-text="item.size"></span>
+                                <span x-text="item.mtime"></span>
+                            </span>
+                        </div>
+                    </template>
+                </div>
+            </div>
+
+            <!-- 底部操作条 -->
+            <div class="modal-footer-bar" style="display: flex; justify-content: space-between; align-items: center;">
+                <div style="display: flex; align-items: center; gap: 8px;">
+                    <span style="font-size: 12px; color: var(--text-secondary);">已勾选 <strong style="color: #60A5FA;" x-text="selectedTreeCount">0</strong> 项</span>
+                    <span class="status-divider">·</span>
+                    <select class="sm-form-select" x-model="treeDir" style="padding: 4px 28px 4px 8px; font-size: 12px; width: auto;">
+                        <option value="push">本地 → 远程 (Push)</option>
+                        <option value="pull">远程 → 本地 (Pull)</option>
+                    </select>
+                </div>
+                <div style="display: flex; align-items: center; gap: 10px;">
+                    <button class="btn-pill-secondary" @click="treeModalOpen = false">取消</button>
+                    <button class="btn-pill-primary" :disabled="selectedTreeCount === 0" @click="executeTreeSync()">
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                            <polygon points="5 3 19 12 5 21 5 3"/>
+                        </svg>
+                        <span>开始精准同步 (<span x-text="selectedTreeCount"></span>)</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+</div>
+
+<style>
+[x-cloak] { display: none !important; }
+
+/* ═══ 分类卡片网格 ═══ */
+.cat-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+    gap: 16px;
+}
+
+.cat-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border-card);
+    border-radius: var(--radius-md);
+    padding: 20px;
+    transition: var(--transition);
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+.cat-card:hover {
+    border-color: var(--border-hover);
+    background: var(--bg-card-hover);
+    box-shadow: var(--shadow-md);
+    transform: translateY(-2px);
+}
+.cat-card-disabled {
+    opacity: 0.5;
+}
+.cat-card-disabled:hover {
+    transform: none;
+}
+
+/* 卡片头部 */
+.cat-card-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+.cat-icon-circle {
+    width: 40px;
+    height: 40px;
+    border-radius: var(--radius-sm);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+/* 开关 */
+.toggle-switch-sm {
+    position: relative;
+    display: inline-block;
+    width: 36px;
+    height: 20px;
+    cursor: pointer;
+}
+.toggle-switch-sm input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+}
+.toggle-slider {
+    position: absolute;
+    inset: 0;
+    background: rgba(255,255,255,0.08);
+    border-radius: 9999px;
+    border: 1px solid var(--border-card);
+    transition: var(--transition);
+}
+.toggle-slider::before {
+    content: "";
+    position: absolute;
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    left: 2px;
+    bottom: 2px;
+    background: var(--text-muted);
+    transition: var(--transition);
+}
+.toggle-switch-sm input:checked + .toggle-slider {
+    background: rgba(16, 185, 129, 0.3);
+    border-color: rgba(16, 185, 129, 0.5);
+}
+.toggle-switch-sm input:checked + .toggle-slider::before {
+    transform: translateX(16px);
+    background: var(--brand-green);
+    box-shadow: 0 0 6px var(--brand-green);
+}
+
+/* 卡片内容体 */
+.cat-card-body {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+.cat-name {
+    font-size: 15px;
+    font-weight: 600;
+    color: #FFF;
+}
+.cat-path-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11.5px;
+    color: var(--text-muted);
+    font-family: 'JetBrains Mono', monospace;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.cat-meta-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-top: 4px;
+}
+.cat-mode-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 2px 8px;
+    border-radius: 6px;
+    font-size: 11px;
+    font-weight: 600;
+}
+.mode-toServer { background: rgba(59, 130, 246, 0.15); color: #60A5FA; border: 1px solid rgba(59, 130, 246, 0.3); }
+.mode-toLocal { background: rgba(16, 185, 129, 0.15); color: #34D399; border: 1px solid rgba(16, 185, 129, 0.3); }
+.mode-bidirectional { background: rgba(139, 92, 246, 0.15); color: #A78BFA; border: 1px solid rgba(139, 92, 246, 0.3); }
+
+.cat-last-sync-text {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 11px;
+    color: var(--text-muted);
+}
+
+/* 卡片底部操作 */
+.cat-card-actions {
+    display: flex;
+    gap: 8px;
+    padding-top: 12px;
+    border-top: 1px solid var(--border-subtle);
+}
+.cat-action-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 5px 12px;
+    border-radius: var(--radius-pill);
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--text-secondary);
+    background: rgba(255,255,255,0.04);
+    border: 1px solid var(--border-card);
+    cursor: pointer;
+    transition: var(--transition);
+}
+.cat-action-btn:hover {
+    background: rgba(255,255,255,0.1);
+    color: #FFF;
+    border-color: var(--border-hover);
+}
+.cat-btn-sync {
+    color: #60A5FA;
+}
+.cat-btn-sync:hover {
+    background: rgba(59, 130, 246, 0.15);
+    border-color: rgba(59, 130, 246, 0.4);
+    color: #60A5FA;
+}
+.cat-btn-danger:hover {
+    background: rgba(239, 68, 68, 0.15);
+    border-color: rgba(239, 68, 68, 0.4);
+    color: #F87171;
+}
+
+/* ═══ 空状态 ═══ */
+.cat-empty-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 80px 20px;
+    text-align: center;
+}
+.cat-empty-icon {
+    width: 72px;
+    height: 72px;
+    border-radius: var(--radius-lg);
+    background: var(--bg-card);
+    border: 1px solid var(--border-card);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 16px;
+}
+.cat-empty-title {
+    font-size: 16px;
+    font-weight: 600;
+    color: #FFF;
+    margin-bottom: 6px;
+}
+.cat-empty-desc {
+    font-size: 13px;
+    color: var(--text-muted);
+}
+
+/* ═══ 弹窗 ═══ */
+.modal-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.6);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+}
+.modal-panel {
+    background: var(--bg-elevated);
+    border: 1px solid var(--border-card);
+    border-radius: var(--radius-lg);
+    width: 540px;
+    max-width: 90vw;
+    box-shadow: var(--shadow-lg);
+    overflow: hidden;
+}
+.modal-enter {
+    transition: all 0.2s ease-out;
+}
+.modal-leave {
+    transition: all 0.15s ease-in;
+}
+.modal-header-bar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 20px 24px;
+    border-bottom: 1px solid var(--border-subtle);
+}
+.modal-title {
+    font-size: 15px;
+    font-weight: 600;
+    color: #FFF;
+}
+.modal-close-btn {
+    background: none;
+    border: none;
+    color: var(--text-muted);
+    cursor: pointer;
+    padding: 4px;
+    border-radius: 6px;
+    transition: var(--transition);
+}
+.modal-close-btn:hover {
+    background: rgba(255,255,255,0.08);
+    color: #FFF;
+}
+.modal-body-content {
+    padding: 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+.modal-footer-bar {
+    display: flex;
+    justify-content: flex-end;
+    gap: 12px;
+    padding: 16px 24px;
+    border-top: 1px solid var(--border-subtle);
+}
+
+/* ═══ 表单元素 ═══ */
+.sm-form-group {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+.sm-form-label {
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--text-secondary);
+}
+.sm-form-input,
+.sm-form-select {
+    background: var(--bg-card);
+    border: 1px solid var(--border-card);
+    border-radius: var(--radius-sm);
+    padding: 10px 12px;
+    font-size: 13px;
+    color: #FFF;
+    font-family: 'Inter', sans-serif;
+    outline: none;
+    transition: var(--transition);
+    width: 100%;
+}
+.sm-form-input::placeholder {
+    color: var(--text-muted);
+}
+.sm-form-input:focus,
+.sm-form-select:focus {
+    border-color: var(--brand-blue);
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
+}
+.sm-form-select {
+    appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2394A3B8' stroke-width='2'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 10px center;
+    padding-right: 32px;
+}
+
+/* ═══ 树状文件行 ═══ */
+.tree-item-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 10px;
+    border-radius: 6px;
+    transition: var(--transition);
+}
+.tree-item-row:hover {
+    background: rgba(255, 255, 255, 0.05);
+}
+.tree-item-name {
+    font-family: 'JetBrains Mono', 'SFMono-Regular', Consolas, monospace;
+    font-size: 12px;
+    color: #E2E8F0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.tree-item-name.is-dir {
+    color: #93C5FD;
+    font-weight: 600;
+}
+</style>
+
+<script>
+function categoriesPage() {
+    const MODE_TEXT = { toServer: '本地 → 服务器', toLocal: '服务器 → 本地', bidirectional: '智能双向' };
+    return {
+        CAT_ICONS: ['cube', 'puzzle', 'folder', 'star', 'gear', 'file', 'database', 'clock'],
+        CAT_COLORS: [
+            { bg: 'rgba(59,130,246,0.15)', fg: '#60A5FA', glow: 'rgba(59,130,246,0.2)' },
+            { bg: 'rgba(139,92,246,0.15)', fg: '#A78BFA', glow: 'rgba(139,92,246,0.2)' },
+            { bg: 'rgba(16,185,129,0.15)', fg: '#34D399', glow: 'rgba(16,185,129,0.2)' },
+            { bg: 'rgba(245,158,11,0.15)', fg: '#FBBF24', glow: 'rgba(245,158,11,0.2)' },
+            { bg: 'rgba(236,72,153,0.15)', fg: '#F472B6', glow: 'rgba(236,72,153,0.2)' },
+            { bg: 'rgba(244,63,94,0.15)', fg: '#FB7185', glow: 'rgba(244,63,94,0.2)' },
+        ],
+        cats: [], loaded: false,
+        modalOpen: false, editingId: null,
+        treeModalOpen: false, treeCat: null, treeFiles: [], treeSearch: '', treeDir: 'push', treeLoading: false,
+        form: { name:'', localPath:'', remotePath:'', mode:'bidirectional', deletePolicy:'noDelete', isEnabled:true, lastSync:'-', files:[] },
+        load() {
+            this.loaded = false;
+            _fetch('/api/categories').then(r => r.json()).then(c => { this.cats = c; this.loaded = true; })
+                .catch(() => { this.loaded = true; });
+        },
+        modeText(mode) { return MODE_TEXT[mode] || mode; },
+        toggle(id, enabled) {
+            _fetch(`/api/category/toggle?id=${encodeURIComponent(id)}&enabled=${enabled ? 1 : 0}`, { method: 'POST' })
+                .then(r => r.json()).then(() => {
+                    const c = this.cats.find(x => x.id === id);
+                    if (c) c.isEnabled = enabled;
+                }).catch(() => {});
+        },
+        sync(c) {
+            const dir = c.mode === 'toServer' ? 'push' : c.mode === 'toLocal' ? 'pull' : 'bidirectional';
+            _fetch('/sync?target=' + encodeURIComponent(c.id) + '&dir=' + dir, { method: 'POST' });
+        },
+        remove(id, name) {
+            if (!confirm(`确认删除分类「${name}」？相关数据也会被清除。`)) return;
+            _fetch(`/api/category/delete?id=${encodeURIComponent(id)}`, { method: 'POST' }).then(() => this.load());
+        },
+        openCreate() {
+            this.editingId = null;
+            this.form = { name:'', localPath:'', remotePath:'', mode:'bidirectional', deletePolicy:'noDelete', isEnabled:true, lastSync:'-', files:[] };
+            this.modalOpen = true;
+        },
+        edit(id) {
+            const c = this.cats.find(x => x.id === id);
+            if (!c) return;
+            this.editingId = id;
+            this.form = { name:c.name, localPath:c.localPath, remotePath:c.remotePath, mode:c.mode, deletePolicy:c.deletePolicy, isEnabled:c.isEnabled, lastSync:c.lastSync, files:[] };
+            this.modalOpen = true;
+        },
+        save() {
+            if (!this.form.name.trim()) { alert('请输入分类名称'); return; }
+            const cat = Object.assign({}, this.form);
+            if (this.editingId) { cat.id = this.editingId; cat._edit = true; }
+            _fetch('/api/category/save', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(cat) })
+                .then(() => { this.modalOpen = false; this.load(); });
+        },
+
+        // ── 精准挑选文件树逻辑 ──
+        get filteredTree() {
+            if (!this.treeSearch.trim()) return this.treeFiles;
+            const q = this.treeSearch.toLowerCase();
+            return this.treeFiles.filter(item => item.path.toLowerCase().includes(q) || item.name.toLowerCase().includes(q));
+        },
+        get selectedTreeCount() {
+            return this.treeFiles.filter(item => item.checked).length;
+        },
+        openTree(c) {
+            this.treeCat = c;
+            this.treeDir = c.mode === 'toLocal' ? 'pull' : 'push';
+            this.treeModalOpen = true;
+            this.treeLoading = true;
+            this.treeFiles = [];
+            this.treeSearch = '';
+            _fetch('/api/category/tree?id=' + encodeURIComponent(c.id))
+                .then(r => r.json())
+                .then(d => {
+                    this.treeLoading = false;
+                    if (d.ok && Array.isArray(d.tree)) {
+                        this.treeFiles = d.tree.map(item => Object.assign({}, item, { checked: false }));
+                    } else if (d.error) {
+                        alert(d.error);
+                    }
+                })
+                .catch(() => { this.treeLoading = false; });
+        },
+        toggleTreeAll(checked) {
+            this.filteredTree.forEach(item => { item.checked = checked; });
+        },
+        toggleTreeFilesOnly() {
+            this.filteredTree.forEach(item => { item.checked = !item.isDir; });
+        },
+        executeTreeSync() {
+            const selected = this.treeFiles.filter(item => item.checked).map(item => item.path);
+            if (selected.length === 0) {
+                alert('请至少勾选一个需要同步的文件或目录');
+                return;
+            }
+            _fetch('/sync', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    target: this.treeCat.id,
+                    dir: this.treeDir,
+                    files: selected
+                })
+            }).then(r => r.json()).then(d => {
+                this.treeModalOpen = false;
+                if (d.ok) {
+                    this.$store.sync.refresh();
+                } else {
+                    alert('同步启动失败: ' + (d.message || '未知错误'));
+                }
+            }).catch(() => alert('请求失败，服务未响应'));
+        }
+    };
+}
+</script>
+{% endblock -%}

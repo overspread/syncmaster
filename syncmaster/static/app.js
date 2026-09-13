@@ -1,18 +1,14 @@
-// SyncMaster App - client-side JS
-function runSync(direction) {
-    const target = 'OCI 187';
-    fetch('/sync?target=' + encodeURIComponent(target) + '&dir=' + direction, { method: 'POST' });
+// SyncMaster App - 公共工具函数（页面交互由 Alpine.js 驱动）
+
+function _fetch(url, opts) {
+    opts = opts || {};
+    opts.headers = opts.headers || {};
+    opts.headers["Authorization"] = "Bearer " + (window.SM_TOKEN || "");
+    return fetch(url, opts);
 }
 
-function cancelSync() {
-    fetch('/cancel', { method: 'POST' });
+function esc(s) {
+    const d = document.createElement('div');
+    d.textContent = s != null ? String(s) : '';
+    return d.innerHTML;
 }
-
-// 定时刷新统计
-setInterval(() => {
-    fetch('/api/stats').then(r => r.json()).then(data => {
-        if (data.pending !== undefined) {
-            document.getElementById('stat-pending') && (document.getElementById('stat-pending').textContent = data.pending);
-        }
-    }).catch(() => {});
-}, 5000);

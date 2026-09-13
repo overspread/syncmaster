@@ -1,0 +1,94 @@
+{%- extends "base.html" -%}
+{%- block title -%}审计日志 | SyncMaster 智能同步中心{% endblock -%}
+{%- block content -%}
+<div x-data="auditPage()" x-init="load()">
+
+    <!-- ════════ 顶部控制栏 ════════ -->
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
+        <div>
+            <div style="font-size: 13px; color: var(--text-secondary); margin-bottom: 2px;">安全与审计日志</div>
+            <div style="font-size: 12px; color: var(--text-muted);">完整操作追踪：记录同步触发、文件扫描、快照回滚与配置变更</div>
+        </div>
+        <div>
+            <button class="btn-pill-outline" @click="load()" title="刷新审计日志">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/>
+                    <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
+                </svg>
+                <span>刷新日志</span>
+            </button>
+        </div>
+    </div>
+
+    <!-- ════════ 审计日志表格 ════════ -->
+    <div class="table-card">
+        <div class="table-responsive">
+            <table class="custom-table">
+                <thead>
+                    <tr>
+                        <th style="width: 170px;">时间</th>
+                        <th style="width: 150px;">操作类型</th>
+                        <th>操作详情</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <template x-for="e in entries" :key="e.time + e.action">
+                        <tr>
+                            <td style="font-family: 'SFMono-Regular', Consolas, monospace; font-size: 12px; color: var(--text-secondary);" x-text="e.time"></td>
+                            <td>
+                                <span class="badge" :class="actionBadgeClass(e.action)" x-text="e.action"></span>
+                            </td>
+                            <td style="color: var(--text-primary); font-size: 13px;" x-text="e.detail || '-'"></td>
+                        </tr>
+                    </template>
+                    <template x-if="!loaded">
+                        <tr>
+                            <td colspan="3" class="table-empty">
+                                <div class="table-empty-inner">
+                                    <svg class="anim-spin" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--text-muted)" stroke-width="2">
+                                        <circle cx="12" cy="12" r="10" stroke-opacity="0.25"/>
+                                        <path d="M12 2a10 10 0 0 1 10 10" stroke-linecap="round"/>
+                                    </svg>
+                                    <span>加载审计日志中...</span>
+                                </div>
+                            </td>
+                        </tr>
+                    </template>
+                    <template x-if="loaded && entries.length === 0">
+                        <tr>
+                            <td colspan="3" class="table-empty">
+                                <div class="table-empty-inner">
+                                    <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="var(--text-muted)" stroke-width="1.5">
+                                        <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+                                    </svg>
+                                    <span>暂无审计日志记录</span>
+                                </div>
+                            </td>
+                        </tr>
+                    </template>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+</div>
+
+<script>
+function auditPage() {
+    return {
+        entries: [], loaded: false,
+        load() {
+            this.loaded = false;
+            _fetch('/api/audit').then(r => r.json()).then(e => { this.entries = e; this.loaded = true; })
+                .catch(() => { this.loaded = true; });
+        },
+        actionBadgeClass(action) {
+            if (action.includes('成功')) return 'badge-success';
+            if (action.includes('失败') || action.includes('取消') || action.includes('删除')) return 'badge-danger';
+            if (action.includes('自动同步') || action.includes('回滚')) return 'badge-warning';
+            return 'badge-neutral';
+        },
+    };
+}
+</script>
+{% endblock -%}

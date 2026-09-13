@@ -1,0 +1,226 @@
+{%- extends "base.html" -%}
+{%- block title -%}历史记录 | SyncMaster 智能同步中心{% endblock -%}
+{%- block content -%}
+<div x-data="historyPage()" x-init="load()">
+
+    <!-- ════════ 顶部控制栏 ════════ -->
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
+        <div>
+            <div style="font-size: 13px; color: var(--text-secondary); margin-bottom: 2px;">同步历史记录</div>
+            <div style="font-size: 12px; color: var(--text-muted);">完整的同步操作记录与结果追踪</div>
+        </div>
+        <div style="display: flex; align-items: center; gap: 10px;">
+            <!-- 筛选选择器 -->
+            <select class="sm-filter-select" x-model="filter" @change="load()">
+                <option value="0">全部记录</option>
+                <option value="1">今天</option>
+                <option value="2">最近 7 天</option>
+                <option value="3">最近 30 天</option>
+            </select>
+
+            <!-- 清空按钮 -->
+            <button class="btn-pill-outline btn-danger-ghost" @click="clearAll()" title="清空所有历史记录">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+                </svg>
+                <span>清空历史</span>
+            </button>
+        </div>
+    </div>
+
+    <!-- ════════ 统计概览胶囊 ════════ -->
+    <div class="history-stats-bar">
+        <div class="history-stat-pill">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#60A5FA" stroke-width="2">
+                <path d="M16 3h5v5M4 20L21 3M21 16v5h-5M15 15l6 6M4 4l5 5"/>
+            </svg>
+            <span>总同步 <strong x-text="entries.length">0</strong> 次</span>
+        </div>
+        <div class="history-stat-pill">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#34D399" stroke-width="2">
+                <circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/>
+            </svg>
+            <span>成功 <strong x-text="successCount">0</strong> 次</span>
+        </div>
+        <div class="history-stat-pill">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#F87171" stroke-width="2">
+                <circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/>
+            </svg>
+            <span>失败 <strong x-text="failCount">0</strong> 次</span>
+        </div>
+        <div class="history-stat-pill">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#A78BFA" stroke-width="2">
+                <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>
+            </svg>
+            <span>成功率 <strong x-text="successRate">-</strong></span>
+        </div>
+    </div>
+
+    <!-- ════════ 历史记录表格 ════════ -->
+    <div class="table-card" style="margin-top: 16px;">
+        <div class="history-table-container">
+            <table class="custom-table">
+                <thead>
+                    <tr>
+                        <th style="width: 170px;">时间</th>
+                        <th>项目 / 分类</th>
+                        <th>同步方向</th>
+                        <th>文件数</th>
+                        <th>传输大小</th>
+                        <th>耗时</th>
+                        <th>状态</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <template x-for="(e, idx) in entries" :key="idx">
+                        <tr>
+                            <td class="time-cell" x-text="e.time"></td>
+                            <td style="font-weight: 600; color: #FFF;" x-text="e.category"></td>
+                            <td>
+                                <span class="direction-tag" x-text="e.direction"></span>
+                            </td>
+                            <td x-text="(e.fileCount || 0) + ' 个'"></td>
+                            <td x-text="e.totalSize || '-'"></td>
+                            <td x-text="e.duration || '-'"></td>
+                            <td>
+                                <span :class="e.result === '成功' ? 'badge-status-success' : 'badge-status-fail'">
+                                    <svg x-show="e.result === '成功'" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                                        <polyline points="20 6 9 17 4 12"/>
+                                    </svg>
+                                    <svg x-show="e.result !== '成功'" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                                        <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+                                    </svg>
+                                    <span x-text="e.result"></span>
+                                </span>
+                            </td>
+                        </tr>
+                    </template>
+
+                    <!-- 加载中 -->
+                    <template x-if="!loaded">
+                        <tr>
+                            <td colspan="7" style="text-align: center; padding: 48px; color: var(--text-muted);">
+                                <div style="display: flex; flex-direction: column; align-items: center; gap: 8px;">
+                                    <svg class="sync-spinner" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--brand-blue)" stroke-width="2.5">
+                                        <path d="M21 12a9 9 0 1 1-6.219-8.56"/>
+                                    </svg>
+                                    <span>加载中...</span>
+                                </div>
+                            </td>
+                        </tr>
+                    </template>
+
+                    <!-- 空状态 -->
+                    <template x-if="loaded && entries.length === 0">
+                        <tr>
+                            <td colspan="7" style="text-align: center; padding: 60px; color: var(--text-muted);">
+                                <div style="display: flex; flex-direction: column; align-items: center; gap: 10px;">
+                                    <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="var(--text-muted)" stroke-width="1.5">
+                                        <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
+                                    </svg>
+                                    <span style="font-size: 14px; font-weight: 500;">暂无同步记录</span>
+                                    <span style="font-size: 12px;">执行同步操作后，记录将显示在这里</span>
+                                </div>
+                            </td>
+                        </tr>
+                    </template>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+</div>
+
+<style>
+/* ═══ 筛选选择器 ═══ */
+.sm-filter-select {
+    background: var(--bg-card);
+    border: 1px solid var(--border-card);
+    border-radius: var(--radius-pill);
+    padding: 6px 30px 6px 14px;
+    font-size: 12.5px;
+    color: var(--text-secondary);
+    font-family: 'Inter', sans-serif;
+    outline: none;
+    cursor: pointer;
+    transition: var(--transition);
+    appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2394A3B8' stroke-width='2'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 10px center;
+}
+.sm-filter-select:hover {
+    border-color: var(--border-hover);
+    color: #FFF;
+}
+.sm-filter-select:focus {
+    border-color: var(--brand-blue);
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
+}
+
+/* ═══ 危险 ghost 按钮 ═══ */
+.btn-danger-ghost {
+    color: var(--text-muted) !important;
+}
+.btn-danger-ghost:hover {
+    border-color: rgba(239, 68, 68, 0.5) !important;
+    color: #F87171 !important;
+    background: rgba(239, 68, 68, 0.1) !important;
+}
+
+/* ═══ 统计概览胶囊条 ═══ */
+.history-stats-bar {
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+.history-stat-pill {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: var(--bg-card);
+    border: 1px solid var(--border-card);
+    border-radius: var(--radius-pill);
+    padding: 8px 16px;
+    font-size: 12.5px;
+    color: var(--text-secondary);
+}
+.history-stat-pill strong {
+    color: #FFF;
+    font-weight: 700;
+}
+</style>
+
+<script>
+function historyPage() {
+    return {
+        filter: '0',
+        entries: [],
+        loaded: false,
+
+        get successCount() {
+            return this.entries.filter(e => e.result === '成功').length;
+        },
+        get failCount() {
+            return this.entries.filter(e => e.result !== '成功').length;
+        },
+        get successRate() {
+            if (this.entries.length === 0) return '-';
+            return ((this.successCount / this.entries.length) * 100).toFixed(1) + '%';
+        },
+
+        load() {
+            this.loaded = false;
+            _fetch('/api/history?filter=' + encodeURIComponent(this.filter))
+                .then(r => r.json())
+                .then(e => { this.entries = e; this.loaded = true; })
+                .catch(() => { this.loaded = true; });
+        },
+        clearAll() {
+            if (!confirm('确认清空所有历史记录？此操作不可撤销。')) return;
+            _fetch('/api/history/clear', { method: 'POST' }).then(() => this.load());
+        },
+    };
+}
+</script>
+{% endblock -%}
