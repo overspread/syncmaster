@@ -26,3 +26,14 @@ __pycache__/
 *.key
 .env
 .env.*
+
+# IDE / editor
+.idea/
+.vscode/
+
+# Tauri build output (1.5G+ of artifacts, never commit)
+src-tauri/target/
+src-tauri/gen/
+
+# Copied web frontend (produced by beforeDevCommand / beforeBuildCommand)
+src-tauri/webapp/
