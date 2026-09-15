@@ -275,7 +275,7 @@ function overviewPage() {
         },
 
         viewDetail(item) {
-            alert(`【${item.category}】同步记录详情\n时间: ${item.time}\n方向: ${item.direction}\n文件数: ${item.fileCount}\n状态: ${item.result}`);
+            notify(`【${item.category}】同步记录详情\n时间: ${item.time}\n方向: ${item.direction}\n文件数: ${item.fileCount}\n状态: ${item.result}`, 'info', 6000);
         }
     };
 }

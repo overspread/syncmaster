@@ -138,7 +138,7 @@
 
     <!-- ════════ 创建/编辑 弹窗 ════════ -->
     <div class="modal-backdrop" x-show="modalOpen" x-cloak x-transition.opacity>
-        <div class="modal-panel" @click.outside="modalOpen = false" x-show="modalOpen" x-transition:enter="modal-enter" x-transition:leave="modal-leave">
+        <div class="modal-panel" @click.outside="modalOpen = false">
             <div class="modal-header-bar">
                 <h3 class="modal-title" x-text="editingId ? '编辑同步分类' : '创建同步分类'"></h3>
                 <button class="modal-close-btn" @click="modalOpen = false">
@@ -195,7 +195,7 @@
 
     <!-- ════════ 精准文件选择器 弹窗 ════════ -->
     <div class="modal-backdrop" x-show="treeModalOpen" x-cloak x-transition.opacity>
-        <div class="modal-panel" style="width: 720px; max-height: 85vh; display: flex; flex-direction: column;" @click.outside="treeModalOpen = false" x-show="treeModalOpen" x-transition:enter="modal-enter" x-transition:leave="modal-leave">
+        <div class="modal-panel" style="width: 720px; max-height: 85vh; display: flex; flex-direction: column;" @click.outside="treeModalOpen = false">
             <div class="modal-header-bar">
                 <div>
                     <h3 class="modal-title" x-text="'挑选文件定向同步 - ' + (treeCat ? treeCat.name : '')"></h3>
@@ -570,18 +570,41 @@ function categoriesPage() {
         modeText(mode) { return MODE_TEXT[mode] || mode; },
         toggle(id, enabled) {
             _fetch(`/api/category/toggle?id=${encodeURIComponent(id)}&enabled=${enabled ? 1 : 0}`, { method: 'POST' })
-                .then(r => r.json()).then(() => {
+                .then(r => r.json()).then(d => {
+                    if (!d.ok) { notify('切换失败: ' + (d.message || '未知错误'), 'error'); return; }
                     const c = this.cats.find(x => x.id === id);
                     if (c) c.isEnabled = enabled;
-                }).catch(() => {});
+                }).catch(() => notify('请求失败，服务未响应', 'error'));
         },
         sync(c) {
+            if (this.$store.sync.running) { notify('当前已有同步在运行', 'error'); return; }
             const dir = c.mode === 'toServer' ? 'push' : c.mode === 'toLocal' ? 'pull' : 'bidirectional';
-            _fetch('/sync?target=' + encodeURIComponent(c.id) + '&dir=' + dir, { method: 'POST' });
+            this.$store.sync.running = true;
+            this.$store.sync.stats.status = '正在准备传输...';
+            _fetch('/sync?target=' + encodeURIComponent(c.id) + '&dir=' + dir, { method: 'POST' })
+                .then(r => r.json())
+                .then(d => {
+                    if (!d.ok) {
+                        this.$store.sync.running = false;
+notify('同步启动失败: ' + (d.message || '未知错误'), 'error');
+                    } else {
+                        this.$store.sync.refresh();
+                    }
+                })
+                .catch(() => {
+                    this.$store.sync.running = false;
+                    notify('请求失败，服务未响应', 'error');
+                });
         },
         remove(id, name) {
             if (!confirm(`确认删除分类「${name}」？相关数据也会被清除。`)) return;
-            _fetch(`/api/category/delete?id=${encodeURIComponent(id)}`, { method: 'POST' }).then(() => this.load());
+            _fetch(`/api/category/delete?id=${encodeURIComponent(id)}`, { method: 'POST' })
+                .then(r => r.json())
+                .then(d => {
+                    if (!d.ok) { notify('删除失败: ' + (d.message || '未知错误'), 'error'); return; }
+                    this.load();
+                })
+                .catch(() => notify('请求失败，服务未响应', 'error'));
         },
         openCreate() {
             this.editingId = null;
@@ -596,11 +619,17 @@ function categoriesPage() {
             this.modalOpen = true;
         },
         save() {
-            if (!this.form.name.trim()) { alert('请输入分类名称'); return; }
+            if (!this.form.name.trim()) { notify('请输入分类名称', 'error'); return; }
             const cat = Object.assign({}, this.form);
             if (this.editingId) { cat.id = this.editingId; cat._edit = true; }
             _fetch('/api/category/save', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(cat) })
-                .then(() => { this.modalOpen = false; this.load(); });
+                .then(r => r.json())
+                .then(d => {
+                    if (!d.ok) { notify('保存失败: ' + (d.message || '未知错误'), 'error'); return; }
+                    this.modalOpen = false;
+                    this.load();
+                })
+                .catch(() => notify('请求失败，服务未响应', 'error'));
         },
 
         // ── 精准挑选文件树逻辑 ──
@@ -626,7 +655,7 @@ function categoriesPage() {
                     if (d.ok && Array.isArray(d.tree)) {
                         this.treeFiles = d.tree.map(item => Object.assign({}, item, { checked: false }));
                     } else if (d.error) {
-                        alert(d.error);
+                        notify(d.error, 'error');
                     }
                 })
                 .catch(() => { this.treeLoading = false; });
@@ -640,7 +669,7 @@ function categoriesPage() {
         executeTreeSync() {
             const selected = this.treeFiles.filter(item => item.checked).map(item => item.path);
             if (selected.length === 0) {
-                alert('请至少勾选一个需要同步的文件或目录');
+                notify('请至少勾选一个需要同步的文件或目录', 'error');
                 return;
             }
             _fetch('/sync', {
@@ -656,9 +685,9 @@ function categoriesPage() {
                 if (d.ok) {
                     this.$store.sync.refresh();
                 } else {
-                    alert('同步启动失败: ' + (d.message || '未知错误'));
+                    notify('同步启动失败: ' + (d.message || '未知错误'), 'error');
                 }
-            }).catch(() => alert('请求失败，服务未响应'));
+            }).catch(() => notify('请求失败，服务未响应', 'error'));
         }
     };
 }

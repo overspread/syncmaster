@@ -263,13 +263,17 @@ document.addEventListener('alpine:init', () => {
                 this.refresh();
             } else if (d.type === 'done') {
                 this.running = false;
+                const status = this.stats.status || '';
+                if (status.includes('失败') || status.includes('错误')) {
+                    notify('同步失败: ' + status, 'error');
+                }
                 this.refresh();
             }
         },
 
         start(direction, btn) {
             if (this.running) return;
-            if (!this.selectedCategory) { alert("请先在顶部选择同步任务"); return; }
+            if (!this.selectedCategory) { notify("请先在顶部选择同步任务", 'error'); return; }
             direction = ({toServer: "push", toLocal: "pull"})[direction] || direction;
             this.running = true;
             this.stats.status = '正在准备传输...';
@@ -278,18 +282,23 @@ document.addEventListener('alpine:init', () => {
                 .then(d => {
                     if (!d.ok) {
                         this.running = false;
-                        alert(d.message || '启动同步失败');
+                        notify(d.message || '启动同步失败', 'error');
                     }
                 })
                 .catch(() => {
                     this.running = false;
+                    notify('请求失败，服务未响应', 'error');
                 });
         },
 
         cancel(btn) {
-            _fetch('/cancel', { method: 'POST' }).then(() => {
-                this.running = false;
-            }).catch(() => {});
+            _fetch('/cancel', { method: 'POST' })
+                .then(r => r.json())
+                .then(d => {
+                    if (!d.ok) notify('停止失败: ' + (d.message || '未知错误'), 'error');
+                    this.running = false;
+                })
+                .catch(() => notify('请求失败，服务未响应', 'error'));
         }
     });
 });

@@ -475,3 +475,42 @@
     from { transform: rotate(0deg); }
     to { transform: rotate(360deg); }
 }
+
+/* ════════ 非阻塞 toast 通知 ════════ */
+.toast-container {
+    position: fixed;
+    top: 16px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 1200;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    pointer-events: none;
+    width: 100%;
+}
+
+.toast {
+    pointer-events: auto;
+    background: var(--bg-elevated);
+    border: 1px solid var(--border-card);
+    border-left: 3px solid var(--brand-blue);
+    color: var(--text-primary);
+    padding: 10px 16px;
+    border-radius: var(--radius-md);
+    font-size: 13px;
+    line-height: 1.5;
+    box-shadow: var(--shadow-lg);
+    max-width: 420px;
+    white-space: pre-wrap;
+    animation: toast-in 0.2s ease-out;
+}
+.toast-error   { border-left-color: #EF4444; }
+.toast-success { border-left-color: #22C55E; }
+.toast-info    { border-left-color: var(--brand-blue); }
+.toast-out     { opacity: 0; transform: translateY(-6px); transition: all 0.25s ease-in; }
+@keyframes toast-in {
+    from { opacity: 0; transform: translateY(-8px); }
+    to   { opacity: 1; transform: translateY(0); }
+}

@@ -904,7 +904,15 @@ def run_sync_impl(cfg: dict, direction: str, files: list = None):
                 # 取消：立即跳出，不再启动后续阶段
                 if sync_cancelled:
                     break
-                if rc != 0:
+                if rc in (23, 24):
+                    # rsync exit 23 = 部分传输出错；exit 24 = 源文件同步中消失。
+                    # 都只说明个别文件未同步，主体已传完，且重试结果不变，
+                    # 不应把整个同步判为失败（旧实现会因此误报失败并白等 10 秒）。
+                    reason = ("部分文件未同步（exit 23，多为权限/文件被占用）"
+                              if rc == 23 else "部分源文件同步中消失（exit 24）")
+                    broadcast({"type": "log",
+                               "text": f"[{label}] 警告：{reason}，其余内容已同步完成。"})
+                elif rc != 0:
                     if rc == 255:
                         broadcast({"type": "log", "text": f"[{label}] SSH 连接失败或中断：{cfg['remoteHost']}。请检查代理/网络链路及服务端 SSH 日志。"})
                     broadcast({"type": "log", "text": f"[{label}] 首次失败，10 秒后自动重试（支持断点续传）..."})
@@ -1729,6 +1737,14 @@ MIME_TYPES = {
 class SyncHandler(BaseHTTPRequestHandler):
     def log_message(self, fmt, *args):
         pass
+
+    def handle_one_request(self):
+        """客户端中途断开（WebView 跳转 / 轮询抢占）时 ConnectionResetError 是正常现象，
+        不能向上抛出导致 http.server 打出整段堆栈。"""
+        try:
+            super().handle_one_request()
+        except (ConnectionResetError, BrokenPipeError):
+            self.close_connection = True
 
     def _write_bytes(self, payload: bytes):
         """发送响应体。客户端中途断开（如页面快速跳转或 6 秒轮询抢占）时

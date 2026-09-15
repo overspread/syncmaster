@@ -143,7 +143,7 @@
 
     <!-- ════════ .env 智能比对与安全合并弹窗 ════════ -->
     <div class="modal-backdrop" x-show="envModalOpen" x-cloak x-transition.opacity>
-        <div class="modal-panel" style="width: 780px; max-height: 85vh; display: flex; flex-direction: column;" @click.outside="envModalOpen = false" x-show="envModalOpen" x-transition:enter="modal-enter" x-transition:leave="modal-leave">
+        <div class="modal-panel" style="width: 780px; max-height: 85vh; display: flex; flex-direction: column;" @click.outside="envModalOpen = false">
             <div class="modal-header-bar">
                 <div style="display: flex; align-items: center; gap: 10px;">
                     <div style="background: rgba(245, 158, 11, 0.15); color: #FBBF24; width: 32px; height: 32px; border-radius: 8px; display: flex; align-items: center; justify-content: center;">
@@ -328,7 +328,7 @@ function diffPage() {
         executeSelectedSync() {
             const selected = this.files.filter(f => f.checked && f.type !== 'ignore').map(f => f.path);
             if (selected.length === 0) {
-                alert('请至少勾选一个需要同步的文件');
+                notify('请至少勾选一个需要同步的文件', 'error');
                 return;
             }
             _fetch('/sync', {
@@ -346,9 +346,9 @@ function diffPage() {
                         location.href = '/';
                     }, 500);
                 } else {
-                    alert('同步启动失败: ' + (d.message || '未知错误'));
+                    notify('同步启动失败: ' + (d.message || '未知错误'), 'error');
                 }
-            }).catch(() => alert('请求失败，服务未响应'));
+            }).catch(() => notify('请求失败，服务未响应', 'error'));
         },
 
         // ── .env 智能比对与合并 ──
@@ -366,7 +366,7 @@ function diffPage() {
                     }
                     this.envData = d;
                 } else {
-                    alert(d.message || '读取 .env 差异失败');
+                    notify(d.message || '读取 .env 差异失败', 'error');
                 }
             }).catch(() => { this.envLoading = false; });
         },
@@ -378,7 +378,7 @@ function diffPage() {
                     item.chosen = 'local';
                 }
             });
-            alert('已将所有机器人 (BOT) 相关及敏感配置设为保留本地保护');
+            notify('已将所有机器人 (BOT) 相关及敏感配置设为保留本地保护', 'info');
         },
 
         saveEnvMerge() {
@@ -398,15 +398,15 @@ function diffPage() {
             }).then(r => r.json()).then(d => {
                 this.envSaving = false;
                 if (d.ok) {
-                    alert('✅ 环境变量已安全合并并创建了备份快照！');
+                    notify('✅ 环境变量已安全合并并创建了备份快照！', 'success');
                     this.envModalOpen = false;
                     this.refreshDiff();
                 } else {
-                    alert('保存合并失败: ' + (d.message || '未知错误'));
+                    notify('保存合并失败: ' + (d.message || '未知错误'), 'error');
                 }
             }).catch(() => {
                 this.envSaving = false;
-                alert('请求失败');
+                notify('请求失败', 'error');
             });
         }
     };

@@ -115,6 +115,11 @@
     gap: 16px;
 }
 
+.backup-card-info {
+    flex: 1;
+    min-width: 0;
+}
+
 .backup-icon-wrap {
     width: 40px;
     height: 40px;
@@ -194,16 +199,21 @@ function backupPage() {
             if (!confirm(`确认回滚到快照「${name}」？\n\n将用此快照数据覆盖本地目录，此操作不可撤销。`)) return;
             _fetch('/api/backup/rollback?path=' + encodeURIComponent(path), { method: 'POST' })
                 .then(r => r.json()).then(d => {
-                    if (d.ok) alert('回滚恢复成功！');
-                    else alert('回滚失败: ' + (d.message || '未知错误'));
+                    if (d.ok) notify('回滚恢复成功！', 'success');
+                    else notify('回滚失败: ' + (d.message || '未知错误'), 'error');
                     this.load();
                 })
-                .catch(() => alert('请求失败，服务未响应'));
+                .catch(() => notify('请求失败，服务未响应', 'error'));
         },
         remove(path, name) {
             if (!confirm(`确认删除快照「${name}」？此操作不可撤销。`)) return;
             _fetch('/api/backup/delete?path=' + encodeURIComponent(path), { method: 'POST' })
-                .then(() => this.load());
+                .then(r => r.json())
+                .then(d => {
+                    if (!d.ok) { notify('删除失败: ' + (d.message || '未知错误'), 'error'); return; }
+                    this.load();
+                })
+                .catch(() => notify('请求失败，服务未响应', 'error'));
         },
     };
 }

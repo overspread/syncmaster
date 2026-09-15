@@ -104,7 +104,7 @@
                                 </span>
                             </td>
                             <td>
-                                <button x-show="e.result === '已停止'" class="table-btn-link" @click="resume(e)">
+                                <button x-show="e.result === '已停止'" class="table-btn-link" style="white-space: nowrap;" @click="resume(e)">
                                     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="margin-right:4px;vertical-align:-2px;">
                                         <polygon points="6 3 20 12 6 21 6 3"/>
                                     </svg>
@@ -229,17 +229,17 @@ function historyPage() {
 
         resume(e) {
             if (this.$store && this.$store.sync && this.$store.sync.running) {
-                alert('当前已有同步在运行，请先等待其完成或停止');
+                notify('当前已有同步在运行，请先等待其完成或停止', 'error');
                 return;
             }
             const dir = e.directionCode || 'push';
             _fetch('/sync?target=' + encodeURIComponent(e.category) + '&dir=' + encodeURIComponent(dir), { method: 'POST' })
                 .then(r => r.json())
                 .then(d => {
-                    if (!d.ok) { alert(d.message || '续传启动失败'); return; }
+                    if (!d.ok) { notify(d.message || '续传启动失败', 'error'); return; }
                     this.load();
                 })
-                .catch(() => alert('请求失败，服务未响应'));
+                .catch(() => notify('请求失败，服务未响应', 'error'));
         },
 
         load() {
@@ -251,7 +251,13 @@ function historyPage() {
         },
         clearAll() {
             if (!confirm('确认清空所有历史记录？此操作不可撤销。')) return;
-            _fetch('/api/history/clear', { method: 'POST' }).then(() => this.load());
+            _fetch('/api/history/clear', { method: 'POST' })
+                .then(r => r.json())
+                .then(d => {
+                    if (!d.ok) { notify('清空失败: ' + (d.message || '未知错误'), 'error'); return; }
+                    this.load();
+                })
+                .catch(() => notify('请求失败，服务未响应', 'error'));
         },
     };
 }

@@ -753,27 +753,29 @@ function settingsPage() {
             _fetch('/api/config/save', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(this.cfg) })
                 .then(r => r.json()).then(d => {
                     if (d.ok) { this.saved = true; setTimeout(() => { this.saved = false; }, 2500); }
-                    else alert(d.message || '保存失败');
-                }).catch(() => alert('请求失败，后端服务未响应'))
+                    else notify(d.message || '保存失败', 'error');
+                }).catch(() => notify('请求失败，后端服务未响应', 'error'))
                 .finally(() => { this.saving = false; });
         },
         saveBackup() {
             _fetch('/api/config/save', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ backupEnabled: this.cfg.backupEnabled, backupRetainDays: this.cfg.backupRetainDays }) })
-                .then(r => r.json()).catch(() => {});
+                .then(r => r.json())
+                .then(d => { if (!d.ok) notify('保存失败: ' + (d.message || '未知错误'), 'error'); })
+                .catch(() => notify('请求失败，服务未响应', 'error'));
         },
         setAutoSync(enabled) {
             const dir = this.autoDirection;
             _fetch('/api/autosync/toggle?enabled=' + (enabled ? 1 : 0) + '&direction=' + dir, { method: 'POST' })
                 .then(r => r.json()).then(d => {
-                    if (!d.ok) { alert(d.message || '切换失败'); this.$store.sync.refresh(); }
-                }).catch(() => alert('请求失败，后端服务未响应'));
+                    if (!d.ok) { notify(d.message || '切换失败', 'error'); this.$store.sync.refresh(); }
+                }).catch(() => notify('请求失败，后端服务未响应', 'error'));
         },
         setAutoDirection(direction) {
             this.dirSaving = true;
             _fetch('/api/autosync/direction?direction=' + direction, { method: 'POST' })
                 .then(r => r.json()).then(d => {
-                    if (!d.ok) { alert(d.message || '切换方向失败'); this.autoDirection = this.$store.sync.autosync.direction; }
-                }).catch(() => alert('请求失败，后端服务未响应'))
+                    if (!d.ok) { notify(d.message || '切换方向失败', 'error'); this.autoDirection = this.$store.sync.autosync.direction; }
+                }).catch(() => notify('请求失败，后端服务未响应', 'error'))
                 .finally(() => { this.dirSaving = false; });
         },
         saveIgnore() {
@@ -782,14 +784,18 @@ function settingsPage() {
             _fetch('/api/syncignore/save', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ rules }) })
                 .then(r => r.json()).then(d => {
                     if (d.ok) { this.savedIgnore = true; setTimeout(() => { this.savedIgnore = false; }, 2500); }
-                    else alert(d.message || '保存失败');
-                }).catch(() => alert('请求失败'))
+                    else notify(d.message || '保存失败', 'error');
+                }).catch(() => notify('请求失败', 'error'))
                 .finally(() => { this.savingIgnore = false; });
         },
         pickPath(id, kind) {
             _fetch('/api/pick_path', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ kind: kind === 'dir' ? 'directory' : 'file' }) })
-                .then(r => r.json()).then(data => { if (data.ok && data.path) this.cfg[id] = data.path; })
-                .catch(() => {});
+                .then(r => r.json())
+                .then(data => {
+                    if (data.ok && data.path) this.cfg[id] = data.path;
+                    else if (data.message) notify(data.message, 'error');
+                })
+                .catch(() => notify('请求失败，服务未响应', 'error'));
         },
     };
 }
