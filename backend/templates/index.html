@@ -230,11 +230,14 @@
                             <td x-text="item.totalSize || '18.4 MB'"></td>
                             <td x-text="item.duration || '12s'"></td>
                             <td>
-                                <span :class="item.result === '成功' ? 'badge-status-success' : 'badge-status-fail'">
+                                <span :class="item.result === '成功' ? 'badge-status-success' : (item.result === '已停止' ? 'badge-status-paused' : 'badge-status-fail')">
                                     <svg x-show="item.result === '成功'" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
                                         <polyline points="20 6 9 17 4 12"/>
                                     </svg>
-                                    <svg x-show="item.result !== '成功'" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                                    <svg x-show="item.result === '已停止'" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                                        <rect width="6" height="14" x="5" y="5" rx="1"/><rect width="6" height="14" x="13" y="5" rx="1"/>
+                                    </svg>
+                                    <svg x-show="item.result === '失败'" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
                                         <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
                                     </svg>
                                     <span x-text="item.result"></span>
@@ -255,30 +258,20 @@
 <script>
 function overviewPage() {
     return {
-        mockHistory: [
-            { time: '2026-09-13 18:45', category: '核心程序', direction: '智能双向', fileCount: 23, totalSize: '18.4 MB', duration: '12s', result: '成功' },
-            { time: '2026-09-13 14:15', category: 'Skills', direction: '本地 → 服务器', fileCount: 18, totalSize: '8.2 MB', duration: '8s', result: '成功' },
-            { time: '2026-09-13 12:10', category: 'Workspace', direction: '服务器 → 本地', fileCount: 8, totalSize: '3.1 MB', duration: '5s', result: '成功' },
-            { time: '2026-09-12 22:30', category: '自定义重要文件', direction: '智能双向', fileCount: 12, totalSize: '1.2 MB', duration: '6s', result: '成功' },
-            { time: '2026-09-12 18:20', category: '核心程序', direction: '智能双向', fileCount: 2, totalSize: '256 KB', duration: '3s', result: '成功' },
-            { time: '2026-09-12 10:05', category: '配置文件', direction: '服务器 → 本地', fileCount: 5, totalSize: '512 KB', duration: '4s', result: '成功' },
-            { time: '2026-09-10 18:22', category: '核心程序', direction: '本地 → 服务器', fileCount: 0, totalSize: '0 B', duration: '-', result: '失败' }
-        ],
-
         get recentHistory() {
             const list = Alpine.store('sync')?.historyList;
             if (list && list.length > 0) {
                 return list.map(item => ({
-                    time: item.time ? (item.time.includes('2026') ? item.time : '2026-' + item.time) : '2026-09-13 18:00',
+                    time: item.time || '-' ,
                     category: item.category || '核心程序',
                     direction: item.direction || '智能双向',
                     fileCount: item.fileCount || 0,
-                    totalSize: (item.totalSize && item.totalSize !== '-') ? item.totalSize : '12.4 MB',
-                    duration: (item.duration && item.duration !== '-') ? item.duration : '8s',
+                    totalSize: (item.totalSize && item.totalSize !== '-') ? item.totalSize : '-',
+                    duration: (item.duration && item.duration !== '-') ? item.duration : '-',
                     result: item.result || '成功'
                 }));
             }
-            return this.mockHistory;
+            return [];
         },
 
         viewDetail(item) {

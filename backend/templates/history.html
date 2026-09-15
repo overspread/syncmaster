@@ -49,6 +49,12 @@
             <span>失败 <strong x-text="failCount">0</strong> 次</span>
         </div>
         <div class="history-stat-pill">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#FBBF24" stroke-width="2">
+                <rect width="6" height="14" x="5" y="5" rx="1"/><rect width="6" height="14" x="13" y="5" rx="1"/>
+            </svg>
+            <span>暂停 <strong x-text="pausedCount">0</strong> 次</span>
+        </div>
+        <div class="history-stat-pill">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#A78BFA" stroke-width="2">
                 <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>
             </svg>
@@ -69,6 +75,7 @@
                         <th>传输大小</th>
                         <th>耗时</th>
                         <th>状态</th>
+                        <th style="width: 80px;">操作</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -83,15 +90,27 @@
                             <td x-text="e.totalSize || '-'"></td>
                             <td x-text="e.duration || '-'"></td>
                             <td>
-                                <span :class="e.result === '成功' ? 'badge-status-success' : 'badge-status-fail'">
+                                <span :class="statusClass(e.result)">
                                     <svg x-show="e.result === '成功'" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
                                         <polyline points="20 6 9 17 4 12"/>
                                     </svg>
-                                    <svg x-show="e.result !== '成功'" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                                    <svg x-show="e.result === '已停止'" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                                        <rect width="6" height="14" x="5" y="5" rx="1"/><rect width="6" height="14" x="13" y="5" rx="1"/>
+                                    </svg>
+                                    <svg x-show="e.result === '失败'" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
                                         <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
                                     </svg>
                                     <span x-text="e.result"></span>
                                 </span>
+                            </td>
+                            <td>
+                                <button x-show="e.result === '已停止'" class="table-btn-link" @click="resume(e)">
+                                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="margin-right:4px;vertical-align:-2px;">
+                                        <polygon points="6 3 20 12 6 21 6 3"/>
+                                    </svg>
+                                    <span>继续</span>
+                                </button>
+                                <span x-show="e.result !== '已停止'" style="color: var(--text-muted); font-size: 11px;">-</span>
                             </td>
                         </tr>
                     </template>
@@ -99,7 +118,7 @@
                     <!-- 加载中 -->
                     <template x-if="!loaded">
                         <tr>
-                            <td colspan="7" style="text-align: center; padding: 48px; color: var(--text-muted);">
+                            <td colspan="8" style="text-align: center; padding: 48px; color: var(--text-muted);">
                                 <div style="display: flex; flex-direction: column; align-items: center; gap: 8px;">
                                     <svg class="sync-spinner" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--brand-blue)" stroke-width="2.5">
                                         <path d="M21 12a9 9 0 1 1-6.219-8.56"/>
@@ -113,7 +132,7 @@
                     <!-- 空状态 -->
                     <template x-if="loaded && entries.length === 0">
                         <tr>
-                            <td colspan="7" style="text-align: center; padding: 60px; color: var(--text-muted);">
+                            <td colspan="8" style="text-align: center; padding: 60px; color: var(--text-muted);">
                                 <div style="display: flex; flex-direction: column; align-items: center; gap: 10px;">
                                     <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="var(--text-muted)" stroke-width="1.5">
                                         <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
@@ -158,16 +177,6 @@
     box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
 }
 
-/* ═══ 危险 ghost 按钮 ═══ */
-.btn-danger-ghost {
-    color: var(--text-muted) !important;
-}
-.btn-danger-ghost:hover {
-    border-color: rgba(239, 68, 68, 0.5) !important;
-    color: #F87171 !important;
-    background: rgba(239, 68, 68, 0.1) !important;
-}
-
 /* ═══ 统计概览胶囊条 ═══ */
 .history-stats-bar {
     display: flex;
@@ -202,11 +211,35 @@ function historyPage() {
             return this.entries.filter(e => e.result === '成功').length;
         },
         get failCount() {
-            return this.entries.filter(e => e.result !== '成功').length;
+            return this.entries.filter(e => e.result === '失败').length;
+        },
+        get pausedCount() {
+            return this.entries.filter(e => e.result === '已停止').length;
         },
         get successRate() {
             if (this.entries.length === 0) return '-';
             return ((this.successCount / this.entries.length) * 100).toFixed(1) + '%';
+        },
+
+        statusClass(result) {
+            if (result === '成功') return 'badge-status-success';
+            if (result === '已停止') return 'badge-status-paused';
+            return 'badge-status-fail';
+        },
+
+        resume(e) {
+            if (this.$store && this.$store.sync && this.$store.sync.running) {
+                alert('当前已有同步在运行，请先等待其完成或停止');
+                return;
+            }
+            const dir = e.directionCode || 'push';
+            _fetch('/sync?target=' + encodeURIComponent(e.category) + '&dir=' + encodeURIComponent(dir), { method: 'POST' })
+                .then(r => r.json())
+                .then(d => {
+                    if (!d.ok) { alert(d.message || '续传启动失败'); return; }
+                    this.load();
+                })
+                .catch(() => alert('请求失败，服务未响应'));
         },
 
         load() {

@@ -99,7 +99,7 @@ fn main() {
             {
             // Resolve server.py location (different layout in dev vs bundled)
             let server_py = resolve_server_py(&app_handle)
-                .expect("Failed to locate syncmaster/server.py");
+                .expect("Failed to locate backend/server.py");
             eprintln!("[syncmaster] using server.py: {}", server_py.display());
 
             // Start python server process
@@ -173,19 +173,19 @@ fn main() {
         });
 }
 
-/// Resolve the absolute path to `syncmaster/server.py`.
+/// Resolve the absolute path to `backend/server.py`.
 ///
 /// Layouts (tried in order):
 /// - Prod (bundled): `<resource_dir>/webapp/server.py`  (copied by beforeBuildCommand)
 /// - Prod flat:      `<resource_dir>/server.py`
-/// - Dev:            `<repo>/src-tauri/../syncmaster/server.py`
+/// - Dev:            `<repo>/src-tauri/../backend/server.py`
 #[cfg(not(debug_assertions))]
 fn resolve_server_py(app: &AppHandle) -> Result<PathBuf> {
     // 1) Try bundled resources first (production layout)
     if let Ok(res_dir) = app.path().resource_dir() {
         let candidates = [
             res_dir.join("webapp").join("server.py"),
-            res_dir.join("syncmaster").join("server.py"),
+            res_dir.join("backend").join("server.py"),
             res_dir.join("server.py"),
         ];
         for c in candidates {
@@ -195,20 +195,20 @@ fn resolve_server_py(app: &AppHandle) -> Result<PathBuf> {
         }
     }
 
-    // 2) Fallback to dev layout: `src-tauri/../syncmaster/server.py`
+    // 2) Fallback to dev layout: `src-tauri/../backend/server.py`
     // `CARGO_MANIFEST_DIR` == <repo>/src-tauri when built from cargo
     let manifest = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     let dev = manifest
         .parent()
         .ok_or_else(|| anyhow::anyhow!("no parent of manifest dir"))?
-        .join("syncmaster")
+        .join("backend")
         .join("server.py");
     if dev.exists() {
         return Ok(dev);
     }
 
     anyhow::bail!(
-        "syncmaster/server.py not found. Looked in resource dir and at {}",
+        "backend/server.py not found. Looked in resource dir and at {}",
         dev.display()
     )
 }

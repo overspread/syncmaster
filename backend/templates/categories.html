@@ -278,8 +278,6 @@
 </div>
 
 <style>
-[x-cloak] { display: none !important; }
-
 /* ═══ 分类卡片网格 ═══ */
 .cat-grid {
     display: grid;
@@ -449,11 +447,6 @@
     border-color: rgba(59, 130, 246, 0.4);
     color: #60A5FA;
 }
-.cat-btn-danger:hover {
-    background: rgba(239, 68, 68, 0.15);
-    border-color: rgba(239, 68, 68, 0.4);
-    color: #F87171;
-}
 
 /* ═══ 空状态 ═══ */
 .cat-empty-state {
@@ -484,72 +477,6 @@
 .cat-empty-desc {
     font-size: 13px;
     color: var(--text-muted);
-}
-
-/* ═══ 弹窗 ═══ */
-.modal-backdrop {
-    position: fixed;
-    inset: 0;
-    background: rgba(0, 0, 0, 0.6);
-    backdrop-filter: blur(8px);
-    -webkit-backdrop-filter: blur(8px);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    z-index: 1000;
-}
-.modal-panel {
-    background: var(--bg-elevated);
-    border: 1px solid var(--border-card);
-    border-radius: var(--radius-lg);
-    width: 540px;
-    max-width: 90vw;
-    box-shadow: var(--shadow-lg);
-    overflow: hidden;
-}
-.modal-enter {
-    transition: all 0.2s ease-out;
-}
-.modal-leave {
-    transition: all 0.15s ease-in;
-}
-.modal-header-bar {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 20px 24px;
-    border-bottom: 1px solid var(--border-subtle);
-}
-.modal-title {
-    font-size: 15px;
-    font-weight: 600;
-    color: #FFF;
-}
-.modal-close-btn {
-    background: none;
-    border: none;
-    color: var(--text-muted);
-    cursor: pointer;
-    padding: 4px;
-    border-radius: 6px;
-    transition: var(--transition);
-}
-.modal-close-btn:hover {
-    background: rgba(255,255,255,0.08);
-    color: #FFF;
-}
-.modal-body-content {
-    padding: 24px;
-    display: flex;
-    flex-direction: column;
-    gap: 16px;
-}
-.modal-footer-bar {
-    display: flex;
-    justify-content: flex-end;
-    gap: 12px;
-    padding: 16px 24px;
-    border-top: 1px solid var(--border-subtle);
 }
 
 /* ═══ 表单元素 ═══ */

@@ -5,8 +5,10 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>{% block title %}SyncMaster | 智能同步中心{% endblock %}</title>
     <link rel="stylesheet" href="/static/style.css">
+    <link rel="stylesheet" href="/static/layout.css">
+    <link rel="stylesheet" href="/static/components.css">
     <script src="/static/app.js"></script>
-    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+    <script defer src="/static/alpinejs.min.js"></script>
 </head>
 <body>
 <div class="app-container" x-data>
@@ -145,6 +147,12 @@
                     </svg>
                 </a>
 
+                <select class="task-select" aria-label="同步任务" x-model="$store.sync.selectedCategory">
+                    <option value="">选择同步任务</option>
+                    <template x-for="cat in $store.sync.categories" :key="cat.id">
+                        <option :value="cat.id" x-text="cat.name"></option>
+                    </template>
+                </select>
                 <!-- 快速同步主按钮 -->
                 <button class="btn-pill-primary" @click="$store.sync.start('bidirectional', $event.currentTarget)">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
@@ -198,15 +206,25 @@
 document.addEventListener('alpine:init', () => {
     Alpine.store('sync', {
         running: false,
+        categories: [],
+        selectedCategory: "",
         stats: { speed: '0 KB/s', done: 0, total: 0, percent: 0, status: '就绪', eta: '--:--', uploaded: 0, downloaded: 0, currentFile: '' },
-        conn: { jumpOk: true, remoteOk: true },
+        conn: { jumpOk: false, remoteOk: false },
         local: null,
         remoteConfig: null,
-        diff: { pending: 23, toUpload: 12, toDownload: 8, conflicts: 3, ok: true },
+        diff: { pending: 0, toUpload: 0, toDownload: 0, conflicts: 0, ok: false },
         historyList: [],
+        // 后台持续同步监听状态（由 /api/autosync 与 SSE autosync 事件驱动）
+        autosync: { enabled: false, mode: 'poll', reason: '', lastSyncAt: 0, direction: 'bidirectional' },
+        // 实时监控页的控制台流水（内存缓冲，避免页面直接读空数组）
+        logLines: [],
         
         init() {
             this.refresh();
+            _fetch("/api/categories").then(r => r.json()).then(rows => {
+                this.categories = rows;
+                if (rows.length === 1) this.selectedCategory = rows[0].id;
+            });
             try {
                 const es = new EventSource('/events?token=' + (window.SM_TOKEN || ''));
                 es.onmessage = e => {
@@ -220,6 +238,7 @@ document.addEventListener('alpine:init', () => {
             _fetch('/api/local-info').then(r => r.json()).then(d => { this.local = d; }).catch(() => {});
             _fetch('/api/config').then(r => r.json()).then(d => { this.remoteConfig = d; }).catch(() => {});
             _fetch('/api/conn_status').then(r => r.json()).then(d => { this.conn = d; }).catch(() => {});
+            _fetch('/api/autosync').then(r => r.json()).then(d => { if (d) this.autosync = Object.assign({}, this.autosync, d); }).catch(() => {});
             _fetch('/api/diff').then(r => r.json()).then(d => { if (d && d.ok) this.diff = d; }).catch(() => {});
             _fetch('/api/monitor').then(r => r.json()).then(d => {
                 this.stats = d;
@@ -234,6 +253,11 @@ document.addEventListener('alpine:init', () => {
             if (d.type === 'stats') {
                 this.stats = d.stats;
                 this.running = (d.stats.status || '').includes('中');
+            } else if (d.type === 'autosync') {
+                this.autosync = Object.assign({}, this.autosync, d);
+            } else if (d.type === 'log') {
+                this.logLines.push(d.text || '');
+                if (this.logLines.length > 400) this.logLines.shift();
             } else if (d.type === 'started') {
                 this.running = true;
                 this.refresh();
@@ -245,9 +269,11 @@ document.addEventListener('alpine:init', () => {
 
         start(direction, btn) {
             if (this.running) return;
+            if (!this.selectedCategory) { alert("请先在顶部选择同步任务"); return; }
+            direction = ({toServer: "push", toLocal: "pull"})[direction] || direction;
             this.running = true;
             this.stats.status = '正在准备传输...';
-            _fetch('/sync?dir=' + direction, { method: 'POST' })
+            _fetch('/sync?dir=' + encodeURIComponent(direction) + '&target=' + encodeURIComponent(this.selectedCategory), { method: 'POST' })
                 .then(r => r.json())
                 .then(d => {
                     if (!d.ok) {

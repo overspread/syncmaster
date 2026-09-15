@@ -6,9 +6,3 @@ function _fetch(url, opts) {
     opts.headers["Authorization"] = "Bearer " + (window.SM_TOKEN || "");
     return fetch(url, opts);
 }
-
-function esc(s) {
-    const d = document.createElement('div');
-    d.textContent = s != null ? String(s) : '';
-    return d.innerHTML;
-}

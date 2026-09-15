@@ -6,8 +6,8 @@
   "build": {
     "frontendDist": "webapp",
     "devUrl": "http://127.0.0.1:9800",
-    "beforeDevCommand": "python3 -c \"import shutil; shutil.copytree('syncmaster', 'src-tauri/webapp', ignore=shutil.ignore_patterns('__pycache__'), dirs_exist_ok=True)\" && python3 syncmaster/server.py",
-    "beforeBuildCommand": "python3 -c \"import shutil; shutil.copytree('syncmaster', 'src-tauri/webapp', ignore=shutil.ignore_patterns('__pycache__'), dirs_exist_ok=True)\""
+    "beforeDevCommand": "python3 -c \"import shutil; shutil.copytree('backend', 'src-tauri/webapp', ignore=shutil.ignore_patterns('__pycache__'), dirs_exist_ok=True)\" && python3 backend/server.py",
+    "beforeBuildCommand": "python3 -c \"import shutil; shutil.copytree('backend', 'src-tauri/webapp', ignore=shutil.ignore_patterns('__pycache__'), dirs_exist_ok=True)\""
   },
   "app": {
     "withGlobalTauri": true,

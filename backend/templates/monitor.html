@@ -1,7 +1,7 @@
 {%- extends "base.html" -%}
 {%- block title -%}实时监控面板 | SyncMaster 智能同步中心{% endblock -%}
 {%- block content -%}
-<div class="monitor-page">
+<div class="monitor-page" x-data="monitorPage()">
 
     <!-- ════════ 顶部控制栏 ════════ -->
     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
@@ -144,8 +144,6 @@
 </div>
 
 <style>
-[x-cloak] { display: none !important; }
-
 .monitor-page {
     max-width: 1000px;
 }
@@ -258,9 +256,9 @@
 </style>
 
 <script>
-document.addEventListener('alpine:init', () => {
-    // 监听状态样式切换
-    Alpine.data('monitorHelper', () => ({
+function monitorPage() {
+    return {
+        // 同步状态徽章样式：完成/成功 → 绿，失败/取消/停止 → 红，进行中 → 蓝
         get monitorStatusClass() {
             const s = Alpine.store('sync').stats.status || '';
             if (s.includes('完成') || s.includes('成功')) return 'badge-success';
@@ -268,7 +266,7 @@ document.addEventListener('alpine:init', () => {
             if (s.includes('中')) return 'badge-running';
             return '';
         }
-    }));
-});
+    };
+}
 </script>
 {% endblock -%}

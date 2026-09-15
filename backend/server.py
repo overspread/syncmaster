@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """SyncMaster - Hermes 配置同步 Web 管理后台"""
 
-import os, sys, json, subprocess, threading, time, secrets, queue, sqlite3, shutil, shlex, socket, re
+import os, sys, json, subprocess, threading, time, secrets, queue, sqlite3, shutil, shlex, socket, re, signal
 import hashlib
+import fnmatch
 import tempfile
 from pathlib import Path
 from datetime import datetime
@@ -105,6 +106,10 @@ class DB:
             """)
             # 清理旧的全局配置项
             c.execute("DELETE FROM config WHERE key IN ('localDir', 'remoteDir')")
+            # 迁移：sync_history 补充 direction_code（用于历史记录"继续"续传）
+            cols = [r["name"] for r in c.execute("PRAGMA table_info(sync_history)").fetchall()]
+            if "direction_code" not in cols:
+                c.execute("ALTER TABLE sync_history ADD COLUMN direction_code TEXT DEFAULT ''")
             c.commit()
 
     # Categories
@@ -160,7 +165,7 @@ class DB:
     # History
     def get_history(self, filter_idx=0):
         now = time.time()
-        sql = "SELECT time_str, timestamp, category, direction, file_count, total_size, duration, result FROM sync_history"
+        sql = "SELECT time_str, timestamp, category, direction, file_count, total_size, duration, result, direction_code FROM sync_history"
         if filter_idx == 1:
             start_of_day = datetime.now().replace(hour=0,minute=0,second=0).timestamp()
             sql += f" WHERE timestamp > {start_of_day}"
@@ -173,15 +178,16 @@ class DB:
             rows = c.execute(sql).fetchall()
             return [{"time":r["time_str"],"timestamp":r["timestamp"],"category":r["category"],
                      "direction":r["direction"],"fileCount":r["file_count"],"totalSize":r["total_size"],
-                     "duration":r["duration"],"result":r["result"]} for r in rows]
+                     "duration":r["duration"],"result":r["result"],
+                     "directionCode": r["direction_code"] or _dir_code(r["direction"])} for r in rows]
 
     def add_history(self, entry):
         with self._conn() as c:
-            c.execute("""INSERT INTO sync_history (timestamp, time_str, category, direction, file_count, total_size, duration, result)
-                         VALUES (?,?,?,?,?,?,?,?)""",
+            c.execute("""INSERT INTO sync_history (timestamp, time_str, category, direction, file_count, total_size, duration, result, direction_code)
+                         VALUES (?,?,?,?,?,?,?,?,?)""",
                       (entry.get("timestamp",time.time()), entry["time"], entry["category"],
                        entry["direction"], entry.get("fileCount",0), entry.get("totalSize","-"),
-                       entry.get("duration",""), entry.get("result","")))
+                       entry.get("duration",""), entry.get("result",""), entry.get("directionCode","")))
 
     def clear_history(self):
         with self._conn() as c:
@@ -256,6 +262,22 @@ sync_lock = threading.Lock()
 def _new_sync_stats(status="就绪"):
     return {"speed": "0 KB/s", "done": 0, "total": 0, "percent": 0, "status": status,
             "eta": "--:--", "uploaded": 0, "downloaded": 0, "currentFile": ""}
+
+def _dir_display(direction):
+    if direction == "push":
+        return "本地 → 服务器"
+    if direction == "pull":
+        return "服务器 → 本地"
+    if direction == "bidirectional":
+        return "双向同步"
+    return direction
+
+def _dir_code(direction_display):
+    if direction_display == "本地 → 服务器":
+        return "push"
+    if direction_display == "服务器 → 本地":
+        return "pull"
+    return "bidirectional"
 
 sync_stats = _new_sync_stats()
 auto_sync_enabled = False
@@ -391,6 +413,12 @@ class AutoSyncEngine:
         timer = threading.Timer(self._retry_after, self._fire_sync)
         timer.daemon = True
         with self._debounce_lock:
+            old = getattr(self, "_debounce_timer", None)
+            if old is not None and old is not timer:
+                try:
+                    old.cancel()
+                except Exception:
+                    pass
             self._debounce_timer = timer
         timer.start()
 
@@ -555,11 +583,206 @@ def _parse_rsync_progress(line):
     if m: eta = m.group(1)
     return count, speed, pct, eta
 
+def _validate_remote_dir(path):
+    import posixpath
+    normalized = posixpath.normpath(path)
+    if not normalized.startswith('/') or len(normalized.strip('/').split('/')) < 3:
+        raise ValueError(f"remote_dir 不安全（{path}），必须指定具体子目录")
+    return normalized
+
+
+def _mode_to_direction(mode):
+    """任务 mode（数据库口径）-> 同步方向（rsync 口径）。
+
+    数据库里 mode 是 'bidirectional'/'toServer'/'toLocal'，而 rsync flag
+    用的是 'bidirectional'/'push'/'pull'。不转换会让 'toServer' 落进
+    _transfer_flags 的 else 分支被加上 --delete，与实际行为不符。
+    """
+    return {"toServer": "push", "toLocal": "pull", "bidirectional": "bidirectional"}.get(
+        mode, "bidirectional")
+
+
+def _transfer_flags(direction, selected):
+    flags = ['-avz', '--partial', '--partial-dir=.rsync-partial',
+             '--no-whole-file', '--timeout=300', '--progress',
+             '--exclude', '.rsync-partial', '--exclude', '.rsync.*']
+    # Merge by modification time; never delete either side's unique files.
+    if direction == 'bidirectional':
+        flags.append('--update')
+    elif not selected:
+        flags.append('--delete')
+    return flags
+
+
+def _files_from_manifest(entries):
+    """把勾选条目写入临时清单文件，返回路径。空清单返回 None。
+
+    精准文件模式下 --files-from 的相对路径含义取决于方向（push 相对本地、
+    pull 相对远端）。某侧完全不存在的条目必须从该侧清单剔除，否则 rsync
+    以 exit 23/24 报错、整个同步被误判为失败。
+    """
+    import tempfile
+    clean = [str(f).strip() for f in entries if str(f).strip()]
+    if not clean:
+        return None
+    tf = tempfile.NamedTemporaryFile("w", delete=False, encoding="utf-8")
+    for f in clean:
+        tf.write(f + "\n")
+    tf.close()
+    return tf.name
+
+
+def _split_selected(selected_files, local_dir):
+    """按“本地是否存在”拆分精准清单：(应上传, 应下载)。
+
+    本地有 -> 上传；本地无 -> 视为远端独有，下载。空清单表示该方向无需运行。
+    """
+    upload, download = [], []
+    if not os.path.isdir(local_dir):
+        return upload, download
+    for f in selected_files:
+        f_s = str(f).strip()
+        if not f_s:
+            continue
+        (upload if os.path.exists(os.path.join(local_dir, f_s)) else download).append(f_s)
+    return upload, download
+
+
+def _flags_allow_delete(transfer_flags):
+    """真实同步的 flag 是否带删除语义。
+
+    单向镜像才有 --delete；双向 --update 与精准模式都不删除。
+    diff 预览必须与真实同步同一来源，不能在这里重复硬编码。
+    """
+    return "--delete" in transfer_flags
+
+
+def _terminate_proc_group(proc, term_timeout=6.0, kill_timeout=3.0):
+    """整组终止 rsync 进程组。
+
+    rsync 会派生 ssh 子进程，只杀主进程会留下孤儿 ssh；因此按进程组
+    (start_new_session=True) 先 SIGTERM 优雅中断，超时才 SIGKILL 兜底。
+    """
+    try:
+        pgid = os.getpgid(proc.pid)
+    except (ProcessLookupError, OSError):
+        pgid = None
+    if pgid is not None:
+        try:
+            os.killpg(pgid, signal.SIGTERM)
+        except (ProcessLookupError, PermissionError, OSError):
+            pass
+    else:
+        try:
+            proc.terminate()
+        except (ProcessLookupError, OSError):
+            pass
+    try:
+        proc.wait(timeout=term_timeout)
+    except subprocess.TimeoutExpired:
+        if pgid is not None:
+            try:
+                os.killpg(pgid, signal.SIGKILL)
+            except (ProcessLookupError, PermissionError, OSError):
+                pass
+        else:
+            try:
+                proc.kill()
+            except (ProcessLookupError, OSError):
+                pass
+        try:
+            proc.wait(timeout=kill_timeout)
+        except subprocess.TimeoutExpired:
+            pass
+    return proc
+
+
+def _cleanup_local_partial(local_dir):
+    """同步成功后清理本地续传残留（.rsync-partial/、.rsync.XXXXXX 临时文件）。"""
+    try:
+        root = Path(local_dir)
+        for name in os.listdir(root):
+            if name == ".rsync-partial" or name.startswith(".rsync."):
+                p = root / name
+                if p.is_dir() and not p.is_symlink():
+                    shutil.rmtree(p, ignore_errors=True)
+                elif p.is_file() or p.is_symlink():
+                    p.unlink(missing_ok=True)
+    except Exception:
+        pass
+
+
+def _cleanup_remote_partial(cfg, remote_dir):
+    """同步成功后清理远端续传残留。
+
+    rsync 完成后 .rsync-partial/ 与 .rsync.XXXXXX 临时文件已无意义，
+    清掉以避免远端目录长期堆积碎片。失败静默（不影响同步结果）。
+    """
+    cmd = "rm -rf -- '.rsync-partial' '.rsync.*' 2>/dev/null"
+    _run_remote_cmd(cfg, "cd %s && %s" % (json.dumps(remote_dir), cmd))
+
+
+# ── 应用层续传检查点 ──
+# rsync 的 --partial 只保证字节层面可续传，不会记住“用户上次选了哪个任务、
+# 哪个方向、勾了哪些文件”。用户中断后再点“开始”时如果这些没被记下来，
+# 就等于从头开始而不是续传。这里把最后一次被中断的传输上下文落盘。
+CHECKPOINT_PATH = Path(os.path.expanduser("~/.syncmaster/resume_checkpoint.json"))
+
+
+def _save_checkpoint(checkpoint):
+    """持久化续传点；checkpoint 为 None 表示清除（同步已成功完成）。"""
+    try:
+        if checkpoint is None:
+            CHECKPOINT_PATH.unlink(missing_ok=True)
+            return
+        CHECKPOINT_PATH.parent.mkdir(parents=True, exist_ok=True)
+        with open(CHECKPOINT_PATH, "w", encoding="utf-8") as f:
+            json.dump(checkpoint, f, ensure_ascii=False)
+    except Exception:
+        pass
+
+
+def _load_checkpoint():
+    """读取上次中断的传输上下文；无或损坏返回 None。"""
+    try:
+        if not CHECKPOINT_PATH.exists():
+            return None
+        with open(CHECKPOINT_PATH, encoding="utf-8") as f:
+            data = json.load(f)
+        return data if isinstance(data, dict) and data.get("categoryId") else None
+    except Exception:
+        return None
+
+
+def get_resume_state():
+    """返回可续传状态，供 UI 展示“是否可续传 + 上次中断在哪”。"""
+    cp = _load_checkpoint()
+    if not cp:
+        return {"resumable": False}
+    return {
+        "resumable": True,
+        "categoryId": cp.get("categoryId"),
+        "categoryName": cp.get("categoryName", ""),
+        "direction": cp.get("direction", ""),
+        "files": cp.get("files", []),
+        "at": cp.get("at", ""),
+    }
+
+
+def clear_resume_checkpoint():
+    """用户放弃续传时清除检查点。"""
+    _save_checkpoint(None)
+    return True
+
+
+# 最近一次（仍在运行或刚被中断的）传输上下文，供 cancel_sync 落盘续传点。
+current_transfer = {"categoryId": "", "categoryName": "", "direction": "", "files": []}
+
 def run_sync_impl(cfg: dict, direction: str, files: list = None):
     global sync_running, sync_process, sync_stats, sync_cancelled
     broadcast({"type": "started", "target": cfg["name"], "direction": direction})
     sync_stats = _new_sync_stats("同步中...")
-    temp_files_file = None
+    temp_manifests = []
     try:
         if _uses_jump_host(cfg) and not os.path.isfile(cfg["jumpKey"]):
             raise FileNotFoundError(f"跳板机本地密钥不存在: {cfg['jumpKey']}")
@@ -567,7 +790,7 @@ def run_sync_impl(cfg: dict, direction: str, files: list = None):
             raise FileNotFoundError(f"服务器本地密钥不存在: {cfg['remoteKey']}")
 
         local_dir = cfg.get("local_dir")
-        remote_dir = cfg.get("remote_dir", "").rstrip("/")
+        remote_dir = _validate_remote_dir(cfg.get("remote_dir", ""))
 
         # 必须通过任务指定路径
         if not local_dir or not remote_dir:
@@ -602,41 +825,64 @@ def run_sync_impl(cfg: dict, direction: str, files: list = None):
             for pat in (".env", ".env.*", "*.env", "*bot*.env"):
                 excl += ["--exclude", pat]
 
-        remote = f"remote:{cfg['remote_dir'].rstrip('/')}/"
+        remote = f"remote:{remote_dir}/"
 
         # 支持按需选择单个或多个文件精准同步
+        manifests = []
         if files and len(files) > 0:
-            import tempfile
-            tf = tempfile.NamedTemporaryFile("w", delete=False, encoding="utf-8")
-            for f in files:
-                f_s = str(f).strip()
-                if f_s:
-                    tf.write(f_s + "\n")
-            tf.close()
-            temp_files_file = tf.name
-            broadcast({"type": "log", "text": f"已启用精准同步模式，共勾选 {len(files)} 个文件/目录"})
+            upload_list, download_list = _split_selected(files, local_dir)
+            if not upload_list and not download_list:
+                raise ValueError("勾选的文件在本地与远端均不存在，无法同步")
+            upload_m = _files_from_manifest(upload_list)
+            download_m = _files_from_manifest(download_list)
+            for m in (upload_m, download_m):
+                if m:
+                    temp_manifests.append(m)
+            manifests.append(("push", upload_m))
+            manifests.append(("pull", download_m))
+            broadcast({"type": "log", "text": f"已启用精准同步模式：上传 {len(upload_list)} 个，"
+                                             f"下载 {len(download_list)} 个"})
             # 精准指定文件时，不传 --delete，避免误删其他文件
-            base_cmd = ["rsync", "-avz", "--compress", "--partial", "--partial-dir=.rsync-partial",
-                        "--timeout=300", "--progress", f"--files-from={temp_files_file}"] + excl + ["-e", remote_ssh]
+            base_cmd = ["rsync"] + _transfer_flags(direction, True) + excl + ["-e", remote_ssh]
         else:
-            base_cmd = ["rsync", "-avz", "--compress", "--partial", "--partial-dir=.rsync-partial",
-                        "--timeout=300", "--delete", "--progress"] + excl + ["-e", remote_ssh]
+            base_cmd = ["rsync"] + _transfer_flags(direction, False) + excl + ["-e", remote_ssh]
 
         # M7: bidirectional = push then pull
-        stages = []
+        order = []
         if direction == "bidirectional":
-            stages = [("push", base_cmd + [f"{local_dir}/", remote]),
-                      ("pull", base_cmd + [remote, f"{local_dir}/"])]
+            order = ["push", "pull"]
         elif direction == "push":
-            stages = [("push", base_cmd + [f"{local_dir}/", remote])]
+            order = ["push"]
         else:
-            stages = [("pull", base_cmd + [remote, f"{local_dir}/"])]
+            order = ["pull"]
+
+        stages = []
+        skipped_stages = []
+        for stage_label in order:
+            manifest = next((m for lbl, m in manifests if lbl == stage_label), None)
+            if manifests and not manifest:
+                # 精准模式下该方向无可传输条目：跳过阶段而不是跑空/报错。
+                skipped_stages.append(stage_label)
+                continue
+            if stage_label == "push":
+                cmd = base_cmd + ([f"--files-from={manifest}"] if manifest else []) + \
+                      [f"{local_dir}/", remote]
+            else:
+                cmd = base_cmd + ([f"--files-from={manifest}"] if manifest else []) + \
+                      [remote, f"{local_dir}/"]
+            stages.append((stage_label, cmd))
+        for lbl in skipped_stages:
+            broadcast({"type": "log", "text": f"[{lbl}] 没有需要传输的文件，已跳过"})
+        if not stages:
+            raise ValueError("没有需要同步的文件")
 
         def _run_rsync(cmd, label):
             global sync_process
             broadcast({"type": "log", "text": f"[{label}] 开始同步... {cfg['remoteUser']}@{cfg['remoteHost']}"})
+            # start_new_session: 独立进程组，取消时可整组 kill，避免残留 ssh 子进程
             sync_process = subprocess.Popen(
                 cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1,
+                start_new_session=True,
             )
             for line in iter(sync_process.stdout.readline, ""):
                 line = line.strip()
@@ -662,7 +908,8 @@ def run_sync_impl(cfg: dict, direction: str, files: list = None):
                     if rc == 255:
                         broadcast({"type": "log", "text": f"[{label}] SSH 连接失败或中断：{cfg['remoteHost']}。请检查代理/网络链路及服务端 SSH 日志。"})
                     broadcast({"type": "log", "text": f"[{label}] 首次失败，10 秒后自动重试（支持断点续传）..."})
-                    time.sleep(10)
+                    if _sleep_cancellable(10):
+                        break
                     if not sync_cancelled:
                         rc = _run_rsync(stage_cmd, f"{label}重试")
                         if rc != 0:
@@ -674,13 +921,20 @@ def run_sync_impl(cfg: dict, direction: str, files: list = None):
         sync_stats["percent"] = 100
         sync_stats["status"] = "完成"
         sync_stats["currentFile"] = "同步完成"
+        # 同步成功：续传残片已无意义，清理避免长期堆积（失败静默）
+        if direction == "pull" or direction == "bidirectional":
+            _cleanup_local_partial(local_dir)
+        if direction == "push" or direction == "bidirectional":
+            _cleanup_remote_partial(cfg, remote_dir)
         broadcast({"type": "done", "success": True, "message": "同步完成"})
+        _save_checkpoint(None)
         db.add_audit("同步成功", f"{cfg['name']} {direction}")
         db.add_history({
             "time": datetime.now().strftime("%m-%d %H:%M:%S"),
             "timestamp": time.time(),
             "category": cfg["name"],
-            "direction": "本地 → 服务器" if direction == "push" else "服务器 → 本地",
+            "direction": _dir_display(direction),
+            "directionCode": direction,
             "fileCount": sync_stats["done"],
             "totalSize": "-",
             "duration": "-",
@@ -699,19 +953,45 @@ def run_sync_impl(cfg: dict, direction: str, files: list = None):
                 "time": datetime.now().strftime("%m-%d %H:%M:%S"),
                 "timestamp": time.time(),
                 "category": cfg["name"],
-                "direction": "本地 → 服务器" if direction == "push" else "服务器 → 本地",
+                "direction": _dir_display(direction),
+                "directionCode": direction,
                 "fileCount": 0,
                 "totalSize": "-",
                 "duration": "-",
                 "result": "失败",
             })
-        # 已取消时 cancel_sync 已处理状态/广播/审计，这里不再重复
+        # 已取消时 cancel_sync 已处理状态/广播，这里不再重复
     finally:
-        if temp_files_file and os.path.exists(temp_files_file):
+        # 取消时 rsync 已被整组 kill，stdout pipe 未由 EOF 关闭，需显式释放 fd。
+        try:
+            if sync_process is not None and sync_process.stdout is not None:
+                sync_process.stdout.close()
+        except Exception:
+            pass
+        if sync_cancelled:
+            # 用户主动停止：记录为"已停止"，不视为失败
             try:
-                os.unlink(temp_files_file)
+                db.add_audit("同步已停止", f"{cfg['name']} {direction}")
+                db.add_history({
+                    "time": datetime.now().strftime("%m-%d %H:%M:%S"),
+                    "timestamp": time.time(),
+                    "category": cfg["name"],
+                    "direction": _dir_display(direction),
+                    "directionCode": direction,
+                    "fileCount": sync_stats["done"],
+                    "totalSize": "-",
+                    "duration": "-",
+                    "result": "已停止",
+                })
             except Exception:
                 pass
+        if temp_manifests:
+            for manifest_path in temp_manifests:
+                if manifest_path and os.path.exists(manifest_path):
+                    try:
+                        os.unlink(manifest_path)
+                    except Exception:
+                        pass
         with sync_lock:
             sync_running = False
             sync_process = None
@@ -720,7 +1000,9 @@ def run_sync_impl(cfg: dict, direction: str, files: list = None):
 
 def start_sync(category_id: str, direction: str, files: list = None):
     """启动指定任务的同步。category_id 必须是有效的任务ID。"""
-    global sync_running
+    global sync_running, sync_cancelled
+    if direction not in ("push", "pull", "bidirectional"):
+        return False, "无效的同步方向"
     if not category_id:
         return False, "必须指定同步任务"
 
@@ -735,11 +1017,19 @@ def start_sync(category_id: str, direction: str, files: list = None):
         cfg["local_dir"] = os.path.expanduser(cat["localPath"])
     if cat.get("remotePath"):
         cfg["remote_dir"] = cat["remotePath"]
+    # 任务的删除策略，决定 diff 是否展示为删除或下载（默认 noDelete = 不删除）
+    cfg["delete_policy"] = cat.get("deletePolicy", "noDelete")
     mode = cat.get("mode", "")
     if mode == "toServer" and direction == "bidirectional":
         direction = "push"
     elif mode == "toLocal" and direction == "bidirectional":
         direction = "pull"
+
+    # 记下本次传输上下文；中断时会落盘成续传点。
+    current_transfer.update({
+        "categoryId": cat["id"], "categoryName": cat["name"],
+        "direction": direction, "files": list(files or []),
+    })
 
     with sync_lock:
         if sync_running:
@@ -752,15 +1042,32 @@ def start_sync(category_id: str, direction: str, files: list = None):
     return True, "同步已启动"
 
 
+def _sleep_cancellable(seconds):
+    """可被取消打断的睡眠。取消时返回 True（由调用方跳出循环）。"""
+    end = time.time() + seconds
+    while time.time() < end:
+        if sync_cancelled:
+            return True
+        time.sleep(0.1)
+    return False
+
+
 def cancel_sync():
     global sync_process, sync_running, sync_stats, sync_cancelled
     with sync_lock:
         if not sync_running:
             return False, "没有正在运行的同步"
         sync_cancelled = True
+        _save_checkpoint({"categoryId": current_transfer.get("categoryId", ""),
+                          "categoryName": current_transfer.get("categoryName", ""),
+                          "direction": current_transfer.get("direction", ""),
+                          "files": list(current_transfer.get("files") or []),
+                          "at": datetime.now().strftime("%Y-%m-%d %H:%M:%S")})
         if sync_process and sync_process.poll() is None:
-            sync_process.terminate()
-        sync_running = False
+            # 整组 SIGTERM（rsync 派生的 ssh 不会残留），超时升级为 SIGKILL。
+            _terminate_proc_group(sync_process)
+        # 注意：不在此处把 sync_running 置 False。让 run_sync_impl 线程收尾后在
+        # finally 里释放，避免用户紧接着"开始"续传时旧线程仍在运行造成竞态。
         sync_stats["status"] = "已停止"
         sync_stats["currentFile"] = "同步已停止，可重新开始续传"
         broadcast({"type": "done", "success": False, "message": "同步已停止（可点开始继续续传）"})
@@ -768,19 +1075,14 @@ def cancel_sync():
 
 
 def get_sync_diff():
-    """对比本地与远程，返回待上传/待下载统计及差异文件明细（dry-run 结果 + 演示条目）。"""
-    result = {"pending": 0, "toUpload": 0, "toDownload": 0, "inSync": 0, "ok": False, "msg": ""}
-    _demo_files = [
-        {"path": "plugins/telegram/bot.py", "type": "modify", "typeName": "修改", "localTime": "2 分钟前", "remoteTime": "10 分钟前", "action": "upload", "actionName": "上传", "checked": True},
-        {"path": "config/settings.json", "type": "modify", "typeName": "修改", "localTime": "30 分钟前", "remoteTime": "昨天 20:15", "action": "download", "actionName": "下载", "checked": True},
-        {"path": "workspace/tasks.json", "type": "conflict", "typeName": "冲突", "localTime": "昨天 18:20", "remoteTime": "2 小时前", "action": "conflict", "actionName": "冲突", "checked": False},
-        {"path": "data/users.db", "type": "conflict", "typeName": "冲突", "localTime": "昨天 12:10", "remoteTime": "昨天 12:05", "action": "conflict", "actionName": "冲突", "checked": False},
-        {"path": "plugins/weather/new.py", "type": "add", "typeName": "新增", "localTime": "10 分钟前", "remoteTime": "-", "action": "upload", "actionName": "上传", "checked": True},
-        {"path": "docs/README.md", "type": "add", "typeName": "新增", "localTime": "1 小时前", "remoteTime": "-", "action": "upload", "actionName": "上传", "checked": True},
-        {"path": "logs/app.log", "type": "delete", "typeName": "删除", "localTime": "-", "remoteTime": "5 小时前", "action": "delete", "actionName": "删除", "checked": True},
-        {"path": ".env", "type": "ignore", "typeName": "忽略", "localTime": "已忽略", "remoteTime": "已忽略", "action": "ignore", "actionName": "已忽略", "checked": False},
-        {"path": "bot_id.json", "type": "ignore", "typeName": "忽略", "localTime": "已忽略", "remoteTime": "已忽略", "action": "ignore", "actionName": "已忽略", "checked": False},
-    ]
+    """对比本地与远程，返回真实差异文件明细。
+
+    两侧各取一份文件树快照（本地 os.walk / 远端 find），按相对路径对齐比较。
+    比较规则与真实同步一致：同一套排除规则、同一套删除策略。
+    冲突用 size+mtime 判定（rsync quick-check 口径），不逐个跑 sha256 以免拖慢界面。
+    """
+    result = {"pending": 0, "toUpload": 0, "toDownload": 0, "conflicts": 0,
+              "inSync": 0, "ok": False, "msg": "", "files": []}
     if sync_running:
         result["msg"] = "同步进行中"
         return result
@@ -799,11 +1101,9 @@ def get_sync_diff():
             result["msg"] = "配置不完整"
             return result
 
-        remote_ssh, _ = _ssh_cmd(cfg)
-        excl = ["--exclude-from=" + str(EXCLUDE_FILE)] if EXCLUDE_FILE.exists() else []
-
-        total_upload = 0
-        total_download = 0
+        base_exclude = _load_exclude_patterns(cfg)
+        all_rows = []
+        remote_errors = []
 
         for cat in enabled_cats:
             local_dir = os.path.expanduser(cat.get("localPath", ""))
@@ -811,51 +1111,212 @@ def get_sync_diff():
             if not local_dir or not remote_dir or not os.path.isdir(local_dir):
                 continue
 
-            remote = f"remote:{remote_dir}/"
-            base = ["rsync", "-avz", "--partial", "--dry-run", "--timeout=15",
-                    "--delete", "--progress"] + excl + ["-e", remote_ssh]
+            local_snap = _scan_local(local_dir)
 
-            def _dry_run(cmd):
-                try:
-                    p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
-                                         text=True, bufsize=1)
-                    out, _ = p.communicate(timeout=25)
-                    count = 0
-                    for line in out.splitlines():
-                        line = line.strip()
-                        if not line or line.endswith("/") or "/" in line:
-                            continue
-                        if line in ("sending incremental file list", "building file list",
-                                    "sent", "total", "created directory",
-                                    "delta-transmission", "receiving incremental file list") or line.endswith("bytes/sec") or "files to consider" in line:
-                            continue
-                        if any(line.startswith(p) for p in ("sent ", "total ", "Number of", "total size is")):
-                            continue
-                        if line[0].isdigit() and "%" in line:
-                            continue
-                        count += 1
-                    return count, p.returncode
-                except Exception:
-                    return 0, -1
+            remote_snap, err = _rsync_remote_tree(cfg, remote_dir)
+            if remote_snap is None:
+                remote_errors.append(f"{cat['name']}: {err}")
+                remote_snap = {}
+                result["msg"] = "部分远端目录无法访问，仅显示本地变更"
 
-            up_count, up_rc = _dry_run(base + [f"{local_dir}/", remote])
-            down_count, down_rc = _dry_run(base + [remote, f"{local_dir}/"])
+            # 与真实同步同一套 flag 规则：diff 的排除/删除策略不能凭空漂移，
+            # 否则“预计上传/删除 N 个”就是谎报。单向镜像=--delete、双向=--update。
+            sync_direction = _mode_to_direction(cat.get("mode", "bidirectional"))
+            transfer_flags = _transfer_flags(sync_direction, selected=False)
+            exclude_pats = list(base_exclude)
+            for i, arg in enumerate(transfer_flags):
+                if arg == "--exclude" and i + 1 < len(transfer_flags):
+                    pat = transfer_flags[i + 1]
+                    if pat not in exclude_pats:
+                        exclude_pats.append(pat)
+            allow_delete = _flags_allow_delete(transfer_flags)
 
-            if up_rc == 0:
-                total_upload += up_count
-            if down_rc == 0:
-                total_download += down_count
+            rows = _compare_trees(local_snap, remote_snap, exclude_pats,
+                                  allow_delete=allow_delete)
+            all_rows.extend(rows)
 
-        result["toUpload"] = total_upload
-        result["toDownload"] = total_download
+        result["toUpload"] = sum(1 for r in all_rows if r["action"] in ("upload", "delete"))
+        result["toDownload"] = sum(1 for r in all_rows if r["action"] == "download")
+        result["conflicts"] = sum(1 for r in all_rows if r["type"] == "conflict")
         result["pending"] = result["toUpload"] + result["toDownload"]
+        result["files"] = all_rows
         result["ok"] = True
-        result["files"] = _demo_files
+        if remote_errors and not result["msg"]:
+            result["msg"] = "; ".join(remote_errors[:2])
         return result
     except Exception as e:
         result["msg"] = str(e)
         return result
 
+
+def _load_exclude_patterns(cfg):
+    """收集与真实同步完全一致的排除规则（.syncignore + 运行时状态 + .env 保护）。"""
+    pats = []
+    if EXCLUDE_FILE.exists():
+        for line in EXCLUDE_FILE.read_text(encoding="utf-8", errors="ignore").splitlines():
+            line = line.strip()
+            if line and not line.startswith("#"):
+                pats.append(line)
+    for pat in ("gateway_state.json", "gateway.pid", "*.lock", "*-shm", "*-wal"):
+        pats.append(pat)
+    if db.get_config().get("envProtectEnabled", "1") != "0":
+        for pat in (".env", ".env.*", "*.env", "*bot*.env"):
+            pats.append(pat)
+    return pats
+
+
+def _path_is_excluded(rel_path, pats):
+    """相对路径是否命中排除规则，尽量与 rsync 语义对齐。"""
+    segs = rel_path.split("/")
+    base = segs[-1]
+    for pat in pats:
+        is_dir_pat = pat.endswith("/")
+        p = pat.rstrip("/")
+        if is_dir_pat and p in segs[:-1]:
+            return True
+        if "/" in p and (rel_path == p or rel_path.startswith(p + "/")):
+            return True
+        if base == p or fnmatch.fnmatch(base, p):
+            return True
+    return False
+
+
+def _fmt_mtime(ts):
+    """把 mtime 渲染成 UI 友好的相对时间。"""
+    if not ts:
+        return "-"
+    age = max(0, time.time() - ts)
+    if age < 60:
+        return "刚刚"
+    if age < 3600:
+        return f"{int(age // 60)} 分钟前"
+    if age < 86400:
+        return f"{int(age // 3600)} 小时前"
+    return datetime.fromtimestamp(ts).strftime("%m-%d %H:%M")
+
+
+def _scan_local(root, max_depth=6):
+    """扫描本地目录，返回 {相对路径: (mtime, size)}。"""
+    out = {}
+    root = os.path.expanduser(root)
+    for cur, dirs, files in os.walk(root):
+        rel_root = os.path.relpath(cur, root)
+        depth = 0 if rel_root == "." else rel_root.count(os.sep) + 1
+        if depth >= max_depth:
+            dirs[:] = []
+        dirs[:] = [d for d in dirs if d not in (".rsync-partial", ".git")]
+        for f in files:
+            if f.endswith(".pyc") or f in (".DS_Store",):
+                continue
+            fp = os.path.join(cur, f)
+            try:
+                st = os.stat(fp)
+            except OSError:
+                continue
+            rel = f if rel_root == "." else os.path.join(rel_root, f).replace(os.sep, "/")
+            out[rel] = (st.st_mtime, st.st_size)
+    return out
+
+
+def _rsync_remote_tree(cfg, remote_dir, timeout=60):
+    """用 find 递归取远端文件树，返回 {相对路径: (mtime, size)}。"""
+    _, ssh_config_path = _ssh_cmd(cfg)
+    ssh_env = dict(os.environ)
+    ssh_env["HOME"] = os.path.expanduser("~")
+    ssh_env["PATH"] = "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+    rd = remote_dir.rstrip("/")
+    script = (
+        f"if [ -d {shlex.quote(rd)} ]; then "
+        f"find {shlex.quote(rd)} -type f "
+        f"-not -path '*/.rsync-partial/*' -not -name '*.pyc' -not -name '.DS_Store' "
+        f"-printf '%T@\t%s\t%P\n' 2>/dev/null; "
+        f"else echo __NODIR__;  fi"
+    )
+    args = ["ssh", "-F", ssh_config_path, "-o", "BatchMode=yes",
+            "-o", "ConnectTimeout=8", "remote", script]
+    try:
+        p = subprocess.run(args, capture_output=True, text=True, timeout=timeout, env=ssh_env)
+    except subprocess.TimeoutExpired:
+        return None, "远程文件列表获取超时"
+    except Exception as e:
+        return None, f"远程文件列表获取失败: {e}"
+    if p.returncode != 0:
+        lines = (p.stderr or p.stdout or "ssh 连接失败").strip().splitlines()
+        return None, lines[-1] if lines else "ssh 连接失败"
+    out = p.stdout.strip()
+    if out == "__NODIR__":
+        return None, f"远程目录不存在: {remote_dir}"
+    snap = {}
+    for line in out.splitlines():
+        parts = line.split("\t", 2)
+        if len(parts) != 3:
+            continue
+        try:
+            snap[parts[2]] = (float(parts[0]), int(parts[1]))
+        except ValueError:
+            continue
+    return snap, None
+
+
+def _compare_trees(local_snap, remote_snap, exclude_pats, allow_delete=True):
+    """比较两份快照，产出 UI 行。allow_delete=False 时，远端独有文件显示为「下载」。"""
+    rows = []
+    local_paths = set(local_snap)
+    remote_paths = set(remote_snap)
+
+    for rel in sorted(local_paths):
+        excluded = _path_is_excluded(rel, exclude_pats)
+        if not excluded and rel.startswith(".git/"):
+            excluded = True
+        l_mtime, l_size = local_snap[rel]
+        if rel in remote_paths:
+            r_mtime, r_size = remote_snap[rel]
+            if excluded:
+                continue
+            if l_size == r_size and abs(l_mtime - r_mtime) < 1:
+                continue
+            rows.append(_mk_row(rel, "conflict", "两端均存在且内容不同，需人工确认",
+                                _fmt_mtime(l_mtime), _fmt_mtime(r_mtime),
+                                "conflict", "冲突", False))
+        else:
+            if excluded:
+                rows.append(_mk_row(rel, "ignore", "本地存在，已被同步规则忽略",
+                                    _fmt_mtime(l_mtime), "已忽略",
+                                    "ignore", "已忽略", False))
+            else:
+                rows.append(_mk_row(rel, "add", "仅本地存在，将上传到服务器",
+                                    _fmt_mtime(l_mtime), "-",
+                                    "upload", "上传", True))
+
+    for rel in sorted(remote_paths):
+        if _path_is_excluded(rel, exclude_pats) or rel in local_paths:
+            continue
+        r_mtime, r_size = remote_snap[rel]
+        if allow_delete:
+            rows.append(_mk_row(rel, "delete", "仅服务器存在，同步将删除本地对应路径",
+                                "-", _fmt_mtime(r_mtime),
+                                "delete", "删除", True))
+        else:
+            rows.append(_mk_row(rel, "download", "仅服务器存在，将下载到本地",
+                                "-", _fmt_mtime(r_mtime),
+                                "download", "下载", True))
+    return rows
+
+
+def _mk_row(rel, ftype, note, local_time, remote_time, action, action_name, checked):
+    names = {"add": "新增", "modify": "修改", "conflict": "冲突",
+             "delete": "删除", "download": "下载", "ignore": "忽略"}
+    return {
+        "path": rel,
+        "type": ftype,
+        "typeName": names.get(ftype, ftype),
+        "note": note,
+        "localTime": local_time,
+        "remoteTime": remote_time,
+        "action": action,
+        "actionName": action_name,
+        "checked": checked,
+    }
 
 def _run_remote_cmd(cfg, cmd_str, timeout=10):
     _, ssh_config_path = _ssh_cmd(cfg)
@@ -1269,11 +1730,20 @@ class SyncHandler(BaseHTTPRequestHandler):
     def log_message(self, fmt, *args):
         pass
 
+    def _write_bytes(self, payload: bytes):
+        """发送响应体。客户端中途断开（如页面快速跳转或 6 秒轮询抢占）时
+        BrokenPipeError 是正常现象，不能向上抛出导致 http.server 打出整段堆栈。"""
+        try:
+            self.wfile.write(payload)
+            self.wfile.flush()
+        except (BrokenPipeError, ConnectionResetError):
+            self.close_connection = True
+
     def _send_json(self, data, status=200):
         self.send_response(status)
         self.send_header("Content-Type", "application/json")
         self.end_headers()
-        self.wfile.write(json.dumps(data, ensure_ascii=False).encode())
+        self._write_bytes(json.dumps(data, ensure_ascii=False).encode())
 
     def _check_auth(self):
         token = None
@@ -1401,6 +1871,9 @@ class SyncHandler(BaseHTTPRequestHandler):
             cid = params.get("id", [""])[0]
             self._send_json(get_category_tree(cid))
 
+        elif path == "/api/resume":
+            self._send_json(get_resume_state())
+
         # ── SSE ──
         elif path == "/api/syncignore":
             rules = []
@@ -1467,6 +1940,9 @@ class SyncHandler(BaseHTTPRequestHandler):
         elif path == "/cancel":
             ok, msg = cancel_sync()
             self._send_json({"ok": ok, "message": msg})
+
+        elif path == "/api/resume/clear":
+            self._send_json({"ok": bool(clear_resume_checkpoint())})
 
         elif path == "/api/env/merge":
             try:
